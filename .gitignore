@@ -3,3 +3,4 @@
 ._Data
 */.DS_Store
 runs/
+**/*.pyc
