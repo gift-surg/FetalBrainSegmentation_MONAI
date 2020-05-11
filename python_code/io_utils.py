@@ -24,13 +24,14 @@ def search_file_in_folder_list(folder_list, file_name):
     return full_file_name
 
 
-def create_data_list(data_folder_list, subject_list, img_postfix='_Image', label_postfix='_Label'):
+def create_data_list(data_folder_list, subject_list, img_postfix='_Image', label_postfix='_Label', is_inference=False):
     """
     create list of all file paths
     :param data_folder_list: list of directories to search
     :param subject_list: list of subject prefix to search (expected filename: <subject_prefix><postfix>.nii.gz)
     :param img_postfix: postfix for image filenames
     :param label_postfix: postfix for label filenames
+    :param is_inference: boolean, if set to True, it will search for images only, not for labels
     :return list of paths to existing files with matched name
     """
 
@@ -48,6 +49,14 @@ def create_data_list(data_folder_list, subject_list, img_postfix='_Image', label
                 image_filename = search_file_in_folder_list(data_folder_list, image_basename)
                 label_basename = "{}{}.nii.gz".format(subject, label_postfix)
                 label_filename = search_file_in_folder_list(data_folder_list, label_basename)
-                if os.path.isfile(image_filename) and os.path.isfile(label_filename):
-                    full_list.append({'img': image_filename, 'seg': label_filename})
+                if os.path.isfile(image_filename):
+                    if is_inference:
+                        full_list.append({'img': image_filename})
+                    else:
+                        if os.path.isfile(label_filename):
+                            full_list.append({'img': image_filename, 'seg': label_filename})
+                        else:
+                            raise IOError('Expected label file: {} not found'.format(label_filename))
+                else:
+                    raise IOError('Expected image file: {} not found'.format(image_filename))
     return full_list
