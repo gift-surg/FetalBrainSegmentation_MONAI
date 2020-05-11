@@ -2,16 +2,19 @@ import os
 import sys
 import logging
 from datetime import datetime
+import yaml
+import argparse
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
+sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate
 from monai.transforms import Compose, LoadNiftid, AddChanneld, AsChannelFirstd, NormalizeIntensityd, Resized, \
-     RandSpatialCropd, RandRotated, RandFlipd, Orientationd, ToTensord
+     RandSpatialCropd, RandRotated, RandFlipd, Orientationd, SqueezeDimd, ToTensord
 from monai.transforms.compose import Transform, MapTransform
 from monai.metrics import compute_meandice
 from monai.visualize import plot_2d_or_3d_image
@@ -20,83 +23,37 @@ from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 
 
-class SqueezeDim(Transform):
-    """
-    Squeeze undesired unitary dimensions
-    """
-
-    def __init__(self, dim=None):
-        """
-        Args:
-            dim (int): dimension to be squeezed.
-                Default: None (all dimensions of size 1 will be removed)
-        """
-        if dim is not None:
-            assert isinstance(dim, int) and dim >= -1, 'invalid channel dimension.'
-        self.dim = dim
-
-    def __call__(self, img):
-        """
-        Args:
-            img (ndarray): numpy arrays with required dimension `dim` removed
-        """
-        return np.squeeze(img, self.dim)
-
-
-class SqueezeDimd(MapTransform):
-    """
-    Dictionary-based wrapper of :py:class:SqueezeDim`.
-    """
-
-    def __init__(self, keys, dim=None):
-        """
-        Args:
-            keys (hashable items): keys of the corresponding items to be transformed.
-                See also: :py:class:`monai.transforms.compose.MapTransform`
-            dim (int): dimension to be squeezed.
-                Default: None (all dimensions of size 1 will be removed)
-        """
-        super().__init__(keys)
-        self.converter = SqueezeDim(dim=dim)
-
-    def __call__(self, data):
-        d = dict(data)
-        for key in self.keys:
-            d[key] = self.converter(d[key])
-        return d
-
-
 def main():
 
-    ############################# parameters that will need to be set with config file
+    """
+    Read input and configuration parameters
+    """
+    parser = argparse.ArgumentParser(description='Run basic UNet with MONAI.')
+    parser.add_argument('--config', dest='config', metavar='config', type=str,
+                        help='config file')
+    args = parser.parse_args()
+
+    with open(args.config) as f:
+        config_info = yaml.load(f, Loader=yaml.FullLoader)
+
     # GPU params
-    cuda_device = 1
-    num_workers = 1
+    cuda_device = config_info['device']['cuda_device']
+    num_workers = config_info['device']['num_workers']
     # training and validation params
-    loss_type = "Dice"
-    batch_size_train = 10
-    batch_size_valid = 1
-    lr = 1e-3
-    nr_train_epochs = 600
-    validation_every_n_epochs = 2
+    loss_type = config_info['training']['loss_type']
+    batch_size_train = config_info['training']['batch_size_train']
+    batch_size_valid = config_info['training']['batch_size_valid']
+    lr = float(config_info['training']['lr'])
+    nr_train_epochs = config_info['training']['nr_train_epochs']
+    validation_every_n_epochs = config_info['training']['validation_every_n_epochs']
     # data params
-    data_root = ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
-                 "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB1",
-                 "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB2",
-                 "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupC",
-                 "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupD",
-                 "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupE",
-                 "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupF"]
-    # list of subject IDs to search for data
-    list_root = "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names"
-    training_list = os.path.join(list_root, "list_train_files.txt")
-    validation_list = [os.path.join(list_root, "list_validation_h_files.txt"),
-                       os.path.join(list_root, "list_validation_p_files.txt")]
+    data_root = config_info['data']['data_root']
+    training_list = config_info['data']['training_list']
+    validation_list = config_info['data']['validation_list']
     # model saving
-    out_model_dir = os.path.join("/mnt/data/mranzini/Desktop/GIFT-Surg/UNet_Monai/runs",
+    out_model_dir = os.path.join(config_info['output']['out_model_dir'],
                                  datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
-    max_nr_models_saved = 5
-    #################################
+    max_nr_models_saved = config_info['output']['max_nr_models_saved']
 
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -200,7 +157,8 @@ def main():
     best_metric_epoch = -1
     epoch_loss_values = list()
     metric_values = list()
-    writer = SummaryWriter(log_dir=out_model_dir)
+    writer_train = SummaryWriter(log_dir=os.path.join(out_model_dir, "train"))
+    writer_valid = SummaryWriter(log_dir=os.path.join(out_model_dir, "valid"))
     net.to(device)
     for epoch in range(nr_train_epochs):
         print('-' * 10)
@@ -219,7 +177,7 @@ def main():
             epoch_loss += loss.item()
             epoch_len = len(train_ds) // train_loader.batch_size
             print("%d/%d, train_loss:%0.4f" % (step, epoch_len, loss.item()))
-            writer.add_scalar('train_loss', loss.item(), epoch_len * epoch + step)
+            writer_train.add_scalar('loss', loss.item(), epoch_len * epoch + step)
         epoch_loss /= step
         epoch_loss_values.append(epoch_loss)
         print("epoch %d average loss:%0.4f" % (epoch + 1, epoch_loss))
@@ -249,14 +207,17 @@ def main():
                     print('saved new best metric model')
                 print("current epoch %d current mean dice: %0.4f best mean dice: %0.4f at epoch %d"
                       % (epoch + 1, metric, best_metric, best_metric_epoch))
-                writer.add_scalar('val_mean_dice', metric, epoch + 1)
+                epoch_len = len(train_ds) // train_loader.batch_size
+                writer_valid.add_scalar('loss', 1.0 - metric, epoch_len * epoch + step)
+                writer_valid.add_scalar('val_mean_dice', metric, epoch + 1)
                 # plot the last model output as GIF image in TensorBoard with the corresponding image and label
-                plot_2d_or_3d_image(val_images, epoch + 1, writer, index=0, tag='image')
-                plot_2d_or_3d_image(val_labels, epoch + 1, writer, index=0, tag='label')
-                plot_2d_or_3d_image(val_outputs, epoch + 1, writer, index=0, tag='output')
+                plot_2d_or_3d_image(val_images, epoch + 1, writer_valid, index=0, tag='image')
+                plot_2d_or_3d_image(val_labels, epoch + 1, writer_valid, index=0, tag='label')
+                plot_2d_or_3d_image(val_outputs, epoch + 1, writer_valid, index=0, tag='output')
 
     print('train completed, best_metric: %0.4f  at epoch: %d' % (best_metric, best_metric_epoch))
-    writer.close()
+    writer_train.close()
+    writer_valid.close()
 
 
 if __name__ == "__main__":
