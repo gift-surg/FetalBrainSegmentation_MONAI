@@ -36,6 +36,9 @@ def main():
     with open(args.config) as f:
         config_info = yaml.load(f, Loader=yaml.FullLoader)
 
+    # print to log the parameter setups
+    print(yaml.dump(config_info))
+
     # GPU params
     cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']
@@ -46,13 +49,17 @@ def main():
     lr = float(config_info['training']['lr'])
     nr_train_epochs = config_info['training']['nr_train_epochs']
     validation_every_n_epochs = config_info['training']['validation_every_n_epochs']
+    sliding_window_validation = config_info['training']['sliding_window_validation']
     # data params
     data_root = config_info['data']['data_root']
     training_list = config_info['data']['training_list']
     validation_list = config_info['data']['validation_list']
     # model saving
+    # model saving
     out_model_dir = os.path.join(config_info['output']['out_model_dir'],
-                                 datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
+                                 datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + '_' +
+                                 config_info['output']['output_subfix'])
+    print("Saving to directory ", out_model_dir)
     max_nr_models_saved = config_info['output']['max_nr_models_saved']
 
     monai.config.print_config()
@@ -115,18 +122,37 @@ def main():
     # - convert data to right format [batch, channel, dim, dim, dim]
     # - apply whitening
     # - resize to (96, 96) in-plane (preserve z-direction)
-    val_transforms = Compose([
-        LoadNiftid(keys=['img', 'seg']),
-        AddChanneld(keys=['img', 'seg']),
-        NormalizeIntensityd(keys=['img']),
-        Resized(keys=['img'], spatial_size=[96, 96], order=1),
-        Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
-        ToTensord(keys=['img', 'seg'])
-    ])
+    if sliding_window_validation:
+        val_transforms = Compose([
+            LoadNiftid(keys=['img', 'seg']),
+            AddChanneld(keys=['img', 'seg']),
+            NormalizeIntensityd(keys=['img']),
+            Resized(keys=['img'], spatial_size=[96, 96], order=1),
+            Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+            ToTensord(keys=['img', 'seg'])
+        ])
+        do_shuffle = False
+        collate_fn_to_use = None
+    else:
+        # - add extraction of 2D slices from validation set to emulate how loss is computed at training
+        val_transforms = Compose([
+            LoadNiftid(keys=['img', 'seg']),
+            AddChanneld(keys=['img', 'seg']),
+            NormalizeIntensityd(keys=['img']),
+            Resized(keys=['img'], spatial_size=[96, 96], order=1),
+            Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+            RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
+            SqueezeDimd(keys=['img', 'seg'], dim=-1),
+            ToTensord(keys=['img', 'seg'])
+        ])
+        do_shuffle = True
+        collate_fn_to_use = list_data_collate
     # create a validation data loader
     val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
     val_loader = DataLoader(val_ds,
                             batch_size=batch_size_valid,
+                            shuffle=do_shuffle,
+                            collate_fn=collate_fn_to_use,
                             num_workers=num_workers)
     check_valid_data = monai.utils.misc.first(val_loader)
     print("Validation data tensor shapes")
@@ -190,14 +216,26 @@ def main():
                 val_images = None
                 val_labels = None
                 val_outputs = None
+                check_tot_validation = 0
                 for val_data in val_loader:
+                    check_tot_validation += 1
                     val_images, val_labels = val_data['img'].to(device), val_data['seg'].to(device)
-                    roi_size = (96, 96, 1)
-                    val_outputs = sliding_window_inference(val_images, roi_size, batch_size_valid, net)
-                    value = compute_meandice(y_pred=val_outputs, y=val_labels, include_background=True,
-                                             to_onehot_y=False, add_sigmoid=True)
-                    metric_count += len(value)
-                    metric_sum += value.sum().item()
+                    if sliding_window_validation:
+                        print('Running sliding window validation')
+                        roi_size = (96, 96, 1)
+                        val_outputs = sliding_window_inference(val_images, roi_size, batch_size_valid, net)
+                        value = compute_meandice(y_pred=val_outputs, y=val_labels, include_background=True,
+                                                 to_onehot_y=False, add_sigmoid=True)
+                        metric_count += len(value)
+                        metric_sum += value.sum().item()
+                    else:
+                        print('Running 2D validation')
+                        # compute validation
+                        val_outputs = net(val_images)
+                        value = 1.0 - loss_function(val_outputs, val_labels)
+                        metric_count += 1
+                        metric_sum += value.item()
+                print("Total number of data in validation: %d" % check_tot_validation)
                 metric = metric_sum / metric_count
                 metric_values.append(metric)
                 if metric > best_metric:

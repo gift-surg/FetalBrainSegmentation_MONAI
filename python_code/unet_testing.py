@@ -50,6 +50,9 @@ def main():
     with open(args.config) as f:
         config_info = yaml.load(f, Loader=yaml.FullLoader)
 
+    # print to log the parameter setups
+    print(yaml.dump(config_info))
+
     # GPU params
     cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']

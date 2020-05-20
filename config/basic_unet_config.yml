@@ -1,6 +1,6 @@
 device:
   cuda_device: 1
-  num_workers: 1
+  num_workers: 4
 
 training:
   loss_type: "Dice"
@@ -8,6 +8,7 @@ training:
   batch_size_valid: 1
   nr_train_epochs: 600
   validation_every_n_epochs: 20
+  sliding_window_validation: True
   lr: 1e-3
 
 data:
@@ -24,4 +25,8 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/runs"
+  output_subfix: "basic_3Dval_4cores"
   max_nr_models_saved: 5
+
+log:
+  message: "Checking whether jump in loss occurs with normal training (vs ignite) with multiple cores"
