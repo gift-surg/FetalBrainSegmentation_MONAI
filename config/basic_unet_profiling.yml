@@ -6,8 +6,8 @@ training:
   loss_type: "Dice"
   batch_size_train: 10
   batch_size_valid: 1
-  nr_train_epochs: 600
-  validation_every_n_epochs: 20
+  nr_train_epochs: 1
+  validation_every_n_epochs: 1
   sliding_window_validation: True
   lr: 1e-3
 
@@ -24,9 +24,8 @@ data:
                     "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_validation_p_files.txt"]
 
 output:
-  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/runs"
-  output_subfix: "basic_3Dval_4cores"
+  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_profiling"
   max_nr_models_saved: 5
 
 log:
-  message: "Checking whether jump in loss occurs with normal training (vs ignite) with multiple cores"
+  message: "Profiling of Training with vanilla unet with ignite and 3D validation - 1 GPU, 4 workers"
