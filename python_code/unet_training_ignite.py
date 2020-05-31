@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 import yaml
 import argparse
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -15,8 +16,8 @@ from ignite.handlers import ModelCheckpoint, EarlyStopping
 sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate
-from monai.transforms import Compose, LoadNiftid, AddChanneld, AsChannelFirstd, NormalizeIntensityd, Resized, \
-     RandSpatialCropd, RandRotated, RandFlipd, Orientationd, SqueezeDimd, ToTensord
+from monai.transforms import Compose, LoadNiftid, AddChanneld, NormalizeIntensityd, Resized, \
+     RandSpatialCropd, RandRotated, RandFlipd, SqueezeDimd, ToTensord
 from monai.handlers import CheckpointLoader, \
     StatsHandler, TensorBoardStatsHandler, TensorBoardImageHandler, MeanDice, stopping_fn_from_metric
 from monai.networks.utils import predict_segmentation
@@ -74,6 +75,10 @@ def main():
                                  datetime.now().strftime('%Y-%m-%d_%H-%M-%S') + '_' +
                                  config_info['output']['output_subfix'])
     print("Saving to directory ", out_model_dir)
+    if 'cache_dir' in config_info['output'].keys():
+        out_cache_dir = config_info['output']['cache_dir']
+    else:
+        out_cache_dir = os.path.join(out_model_dir, 'persistent_cache')
     max_nr_models_saved = config_info['output']['max_nr_models_saved']
 
     monai.config.print_config()
@@ -84,6 +89,10 @@ def main():
     """
     Data Preparation
     """
+    # create cache directory to store results for Persistent Dataset
+    persistent_cache: Path = Path(out_cache_dir)
+    persistent_cache.mkdir(parents=True, exist_ok=True)
+
     # create training and validation data lists
     train_files = create_data_list(data_folder_list=data_root,
                                    subject_list=training_list,
@@ -113,16 +122,18 @@ def main():
         LoadNiftid(keys=['img', 'seg']),
         AddChanneld(keys=['img', 'seg']),
         NormalizeIntensityd(keys=['img']),
-        Resized(keys=['img'], spatial_size=[96, 96], order=1),
-        Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+        Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
         RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
-        RandRotated(keys=['img', 'seg'], degrees=90, prob=0.2, spatial_axes=[0, 1], order=0, reshape=False),
+        RandRotated(keys=['img', 'seg'], degrees=90, prob=0.2, spatial_axes=[0, 1], interp_order=[1, 0], reshape=False),
         RandFlipd(keys=['img', 'seg'], spatial_axis=[0, 1]),
         SqueezeDimd(keys=['img', 'seg'], dim=-1),
         ToTensord(keys=['img', 'seg'])
     ])
     # create a training data loader
-    train_ds = monai.data.Dataset(data=train_files, transform=train_transforms)
+    # train_ds = monai.data.Dataset(data=train_files, transform=train_transforms)
+    # train_ds = monai.data.CacheDataset(data=train_files, transform=train_transforms, cache_rate=1.0,
+    #                                    num_workers=num_workers)
+    train_ds = monai.data.PersistentDataset(data=train_files, transform=train_transforms, cache_dir=persistent_cache)
     train_loader = DataLoader(train_ds,
                               batch_size=batch_size_train,
                               shuffle=True, num_workers=num_workers,
@@ -141,8 +152,7 @@ def main():
             LoadNiftid(keys=['img', 'seg']),
             AddChanneld(keys=['img', 'seg']),
             NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img'], spatial_size=[96, 96], order=1),
-            Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+            Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
             ToTensord(keys=['img', 'seg'])
         ])
         do_shuffle = False
@@ -153,8 +163,7 @@ def main():
             LoadNiftid(keys=['img', 'seg']),
             AddChanneld(keys=['img', 'seg']),
             NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img'], spatial_size=[96, 96], order=1),
-            Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+            Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
             RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
             SqueezeDimd(keys=['img', 'seg'], dim=-1),
             ToTensord(keys=['img', 'seg'])
@@ -162,7 +171,10 @@ def main():
         do_shuffle = True
         collate_fn_to_use = list_data_collate
     # create a validation data loader
-    val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
+    # val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
+    # val_ds = monai.data.CacheDataset(data=val_files, transform=val_transforms, cache_rate=1.0,
+    #                                    num_workers=num_workers)
+    val_ds = monai.data.PersistentDataset(data=val_files, transform=val_transforms, cache_dir=persistent_cache)
     val_loader = DataLoader(val_ds,
                             batch_size=batch_size_valid,
                             shuffle=do_shuffle,
@@ -230,7 +242,7 @@ def main():
     # add evaluation metric to the evaluator engine
     val_metrics = {
         "Loss": 1.0 - MeanDice(add_sigmoid=True, to_onehot_y=False),
-        "Mean Dice": MeanDice(add_sigmoid=True, to_onehot_y=False)
+        "Mean_Dice": MeanDice(add_sigmoid=True, to_onehot_y=False)
     }
 
     def _sliding_window_processor(engine, batch):
@@ -243,12 +255,14 @@ def main():
 
     if sliding_window_validation:
         # use sliding window inference at validation
+        print("3D evaluator is used")
         evaluator = Engine(_sliding_window_processor)
         for name, metric in val_metrics.items():
             metric.attach(evaluator, name)
     else:
         # ignite evaluator expects batch=(img, seg) and returns output=(y_pred, y) at every iteration,
         # user can add output_transform to return other values
+        print("2D evaluator is used")
         evaluator = create_supervised_evaluator(model=net, metrics=val_metrics, device=device,
                                                 non_blocking=True, prepare_batch=prepare_batch)
 

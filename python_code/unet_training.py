@@ -13,9 +13,8 @@ from torch.utils.tensorboard import SummaryWriter
 sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate
-from monai.transforms import Compose, LoadNiftid, AddChanneld, AsChannelFirstd, NormalizeIntensityd, Resized, \
-     RandSpatialCropd, RandRotated, RandFlipd, Orientationd, SqueezeDimd, ToTensord
-from monai.transforms.compose import Transform, MapTransform
+from monai.transforms import Compose, LoadNiftid, AddChanneld, NormalizeIntensityd, Resized, \
+     RandSpatialCropd, RandRotated, RandFlipd, SqueezeDimd, ToTensord
 from monai.metrics import compute_meandice
 from monai.visualize import plot_2d_or_3d_image
 
@@ -99,10 +98,9 @@ def main():
         LoadNiftid(keys=['img', 'seg']),
         AddChanneld(keys=['img', 'seg']),
         NormalizeIntensityd(keys=['img']),
-        Resized(keys=['img'], spatial_size=[96, 96], order=1),
-        Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+        Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
         RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
-        RandRotated(keys=['img', 'seg'], degrees=90, prob=0.2, spatial_axes=[0, 1], order=0, reshape=False),
+        RandRotated(keys=['img', 'seg'], degrees=90, prob=0.2, spatial_axes=[0, 1], interp_order=[1, 0], reshape=False),
         RandFlipd(keys=['img', 'seg'], spatial_axis=[0, 1]),
         SqueezeDimd(keys=['img', 'seg'], dim=-1),
         ToTensord(keys=['img', 'seg'])
@@ -127,8 +125,7 @@ def main():
             LoadNiftid(keys=['img', 'seg']),
             AddChanneld(keys=['img', 'seg']),
             NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img'], spatial_size=[96, 96], order=1),
-            Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+            Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
             ToTensord(keys=['img', 'seg'])
         ])
         do_shuffle = False
@@ -139,8 +136,7 @@ def main():
             LoadNiftid(keys=['img', 'seg']),
             AddChanneld(keys=['img', 'seg']),
             NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img'], spatial_size=[96, 96], order=1),
-            Resized(keys=['seg'], spatial_size=[96, 96], order=0, anti_aliasing=False),
+            Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
             RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
             SqueezeDimd(keys=['img', 'seg'], dim=-1),
             ToTensord(keys=['img', 'seg'])

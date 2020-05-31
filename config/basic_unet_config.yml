@@ -5,10 +5,10 @@ device:
 training:
   loss_type: "Dice"
   batch_size_train: 10
-  batch_size_valid: 1
+  batch_size_valid: 10
   nr_train_epochs: 600
   validation_every_n_epochs: 20
-  sliding_window_validation: True
+  sliding_window_validation: False
   lr: 1e-3
 
 data:
@@ -25,7 +25,7 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/runs"
-  output_subfix: "basic_3Dval_4cores"
+  output_subfix: "basic_2Dval_4cores"
   max_nr_models_saved: 5
 
 log:
