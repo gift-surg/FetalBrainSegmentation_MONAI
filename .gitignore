@@ -4,6 +4,7 @@
 ._action_log.txt
 */.DS_Store
 runs/
+tests_deterministic_seeds/
 tests_profiling/
 **/*.pyc
 **/.ipynb_checkpoints/
