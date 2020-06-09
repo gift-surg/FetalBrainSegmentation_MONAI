@@ -19,8 +19,9 @@ from monai.data import list_data_collate
 from monai.transforms import Compose, LoadNiftid, AddChanneld, NormalizeIntensityd, Resized, \
      RandSpatialCropd, RandRotated, RandFlipd, SqueezeDimd, ToTensord
 from monai.handlers import CheckpointLoader, \
-    StatsHandler, TensorBoardStatsHandler, TensorBoardImageHandler, MeanDice, stopping_fn_from_metric
+    StatsHandler, TensorBoardStatsHandler, TensorBoardImageHandler, LrScheduleHandler, MeanDice, stopping_fn_from_metric
 from monai.networks.utils import predict_segmentation
+from monai.utils import set_determinism
 from monai.metrics import compute_meandice
 from monai.visualize import plot_2d_or_3d_image
 
@@ -57,6 +58,9 @@ def main():
     batch_size_train = config_info['training']['batch_size_train']
     batch_size_valid = config_info['training']['batch_size_valid']
     lr = float(config_info['training']['lr'])
+    lr_decay = config_info['training']['lr_decay']
+    if lr_decay is not None:
+        lr_decay = float(lr_decay)
     nr_train_epochs = config_info['training']['nr_train_epochs']
     validation_every_n_epochs = config_info['training']['validation_every_n_epochs']
     sliding_window_validation = config_info['training']['sliding_window_validation']
@@ -66,6 +70,10 @@ def main():
             raise BlockingIOError("cannot find model: {}".format(model_to_load))
     else:
         model_to_load = None
+    if 'manual_seed' in config_info['training'].keys():
+        seed = config_info['training']['manual_seed']
+    else:
+        seed = None
     # data params
     data_root = config_info['data']['data_root']
     training_list = config_info['data']['training_list']
@@ -80,11 +88,19 @@ def main():
     else:
         out_cache_dir = os.path.join(out_model_dir, 'persistent_cache')
     max_nr_models_saved = config_info['output']['max_nr_models_saved']
+    val_image_to_tensorboad = config_info['output']['val_image_to_tensorboad']
 
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
     torch.cuda.set_device(cuda_device)
+    if seed is not None:
+        # set manual seed if required (both numpy and torch)
+        set_determinism(seed=seed)
+        # # set torch only seed
+        # torch.manual_seed(seed)
+        # torch.backends.cudnn.deterministic = True
+        # torch.backends.cudnn.benchmark = False
 
     """
     Data Preparation
@@ -200,6 +216,8 @@ def main():
     loss_function = monai.losses.DiceLoss(do_sigmoid=True)
     opt = torch.optim.Adam(net.parameters(), lr)
     device = torch.cuda.current_device()
+    if lr_decay is not None:
+        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=opt, gamma=lr_decay, last_epoch=-1)
 
     """
     Set ignite trainer
@@ -233,6 +251,11 @@ def main():
     writer_train = SummaryWriter(log_dir=os.path.join(out_model_dir, "train"))
     train_tensorboard_stats_handler = TensorBoardStatsHandler(summary_writer=writer_train)
     train_tensorboard_stats_handler.attach(trainer)
+
+    if lr_decay is not None:
+        print("Using Exponential LR decay")
+        lr_schedule_handler = LrScheduleHandler(lr_scheduler, print_lr=True, name="lr_scheduler", writer=writer_train)
+        lr_schedule_handler.attach(trainer)
 
     """
     Set ignite evaluator to perform validation at training
@@ -296,14 +319,15 @@ def main():
 
     # add handler to draw the first image and the corresponding label and model output in the last batch
     # here we draw the 3D output as GIF format along the depth axis, every 2 validation iterations.
-    val_tensorboard_image_handler = TensorBoardImageHandler(
-        summary_writer=writer_valid,
-        batch_transform=lambda batch: (batch['img'], batch['seg']),
-        output_transform=lambda output: predict_segmentation(output[0]),
-        global_iter_transform=lambda x: trainer.state.epoch
-    )
-    evaluator.add_event_handler(
-        event_name=Events.ITERATION_COMPLETED(every=1), handler=val_tensorboard_image_handler)
+    if val_image_to_tensorboad:
+        val_tensorboard_image_handler = TensorBoardImageHandler(
+            summary_writer=writer_valid,
+            batch_transform=lambda batch: (batch['img'], batch['seg']),
+            output_transform=lambda output: predict_segmentation(output[0]),
+            global_iter_transform=lambda x: trainer.state.epoch
+        )
+        evaluator.add_event_handler(
+            event_name=Events.ITERATION_COMPLETED(every=1), handler=val_tensorboard_image_handler)
 
     """
     Run training
