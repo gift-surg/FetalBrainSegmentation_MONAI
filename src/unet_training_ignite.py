@@ -279,6 +279,7 @@ def main():
     if sliding_window_validation:
         # use sliding window inference at validation
         print("3D evaluator is used")
+        net.to(device)
         evaluator = Engine(_sliding_window_processor)
         for name, metric in val_metrics.items():
             metric.attach(evaluator, name)
