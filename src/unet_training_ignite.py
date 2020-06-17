@@ -24,9 +24,162 @@ from monai.networks.utils import predict_segmentation
 from monai.utils import set_determinism
 from monai.metrics import compute_meandice
 from monai.visualize import plot_2d_or_3d_image
+from monai.utils.misc import is_scalar
+import warnings
+import logging
 
 from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
+
+DEFAULT_KEY_VAL_FORMAT = '{}: {:.4f} '
+DEFAULT_TAG = 'Loss'
+
+
+def my_iteration_print_logger(engine):
+    """Execute iteration log operation based on Ignite engine.state data.
+    Print the values from ignite state.logs dict.
+    Default behavior is to print loss from output[1], skip if output[1] is not loss.
+
+    Args:
+        engine (ignite.engine): Ignite Engine, it can be a trainer, validator or evaluator.
+
+    """
+    key_var_format = DEFAULT_KEY_VAL_FORMAT
+    tag_name = DEFAULT_TAG
+    loss = engine.state.output
+    if loss is None:
+        return  # no printing if the output is empty
+
+    out_str = ''
+    if isinstance(loss, dict):  # print dictionary items
+        for name in sorted(loss):
+            value = loss[name]
+            if not is_scalar(value):
+                warnings.warn('ignoring non-scalar output in StatsHandler,'
+                              ' make sure `output_transform(engine.state.output)` returns'
+                              ' a scalar or dictionary of key and scalar pairs to avoid this warning.'
+                              ' {}:{}'.format(name, type(value)))
+                continue  # not printing multi dimensional output
+            out_str += key_var_format.format(name, value.item() if torch.is_tensor(value) else value)
+    else:
+        if is_scalar(loss):  # not printing multi dimensional output
+            out_str += key_var_format.format(tag_name, loss.item() if torch.is_tensor(loss) else loss)
+        else:
+            warnings.warn('ignoring non-scalar output in StatsHandler,'
+                          ' make sure `output_transform(engine.state.output)` returns'
+                          ' a scalar or a dictionary of key and scalar pairs to avoid this warning.'
+                          ' {}'.format(type(loss)))
+
+    if not out_str:
+        return  # no value to print
+
+    num_iterations = engine.state.epoch_length
+    # current_iteration = (engine.state.iteration - 1) % num_iterations + 1
+    current_iteration = engine.state.iteration
+    current_epoch = engine.state.epoch
+    num_epochs = engine.state.max_epochs
+
+    base_str = "Epoch: {}/{}, Iter: {} --".format(
+        current_epoch,
+        num_epochs,
+        current_iteration,
+        num_iterations)
+
+    engine.logger.info(' '.join([base_str, out_str]))
+
+
+class MyTensorBoardImageHandler(object):
+    """TensorBoardImageHandler is an ignite Event handler that can visualise images, labels and outputs as 2D/3D images.
+    2D output (shape in Batch, channel, H, W) will be shown as simple image using the first element in the batch,
+    for 3D to ND output (shape in Batch, channel, H, W, D) input, each of ``self.max_channels`` number of images'
+    last three dimensions will be shown as animated GIF along the last axis (typically Depth).
+
+    It's can be used for any Ignite Engine (trainer, validator and evaluator).
+    User can easily added it to engine for any expected Event, for example: ``EPOCH_COMPLETED``,
+    ``ITERATION_COMPLETED``. The expected data source is ignite's ``engine.state.batch`` and ``engine.state.output``.
+
+    Default behavior:
+        - Show y_pred as images (GIF for 3D) on TensorBoard when Event triggered,
+        - need to use ``batch_transform`` and ``output_transform`` to specify
+          how many images to show and show which channel.
+        - Expects ``batch_transform(engine.state.batch)`` to return data
+          format: (image[N, channel, ...], label[N, channel, ...]).
+        - Expects ``output_transform(engine.state.output)`` to return a torch
+          tensor in format (y_pred[N, channel, ...], loss).
+
+     """
+
+    def __init__(self,
+                 summary_writer=None,
+                 batch_transform=lambda x: x,
+                 output_transform=lambda x: x,
+                 global_iter_transform=lambda x: x,
+                 index=None,
+                 max_channels=1,
+                 max_frames=64):
+        """
+        Args:
+            summary_writer (SummaryWriter): user can specify TensorBoard SummaryWriter,
+                default to create a new writer.
+            batch_transform (Callable): a callable that is used to transform the
+                ``ignite.engine.batch`` into expected format to extract several label data.
+            output_transform (Callable): a callable that is used to transform the
+                ``ignite.engine.output`` into expected format to extract several output data.
+            global_iter_transform (Callable): a callable that is used to customize global step number for TensorBoard.
+                For example, in evaluation, the evaluator engine needs to know current epoch from trainer.
+            index (int): plot which element in a data batch, default is the first element.
+            max_channels (int): number of channels to plot.
+            max_frames (int): number of frames for 2D-t plot.
+        """
+        self._writer = SummaryWriter() if summary_writer is None else summary_writer
+        self.batch_transform = batch_transform
+        self.output_transform = output_transform
+        self.global_iter_transform = global_iter_transform
+        self.index = index
+        self.max_frames = max_frames
+        self.max_channels = max_channels
+
+    def __call__(self, engine):
+        step = self.global_iter_transform(engine.state.iteration)
+
+        show_images = self.batch_transform(engine.state.batch)[0]
+        if torch.is_tensor(show_images):
+            show_images = show_images.detach().cpu().numpy()
+
+        if show_images is not None:
+            if not isinstance(show_images, np.ndarray):
+                raise ValueError('output_transform(engine.state.output)[0] must be an ndarray or tensor.')
+            if self.index is None:
+                self.index = [0]
+            elif self.index in ['all', 'ALL', 'All']:
+                print(show_images.shape)
+                self.index = range(0, show_images.shape[0])
+                print(self.index)
+            for idx in self.index:
+                plot_2d_or_3d_image(show_images, step, self._writer, idx,
+                                    self.max_channels, self.max_frames, 'input_0_' + str(idx))
+
+        show_labels = self.batch_transform(engine.state.batch)[1]
+        if torch.is_tensor(show_labels):
+            show_labels = show_labels.detach().cpu().numpy()
+        if show_labels is not None:
+            if not isinstance(show_labels, np.ndarray):
+                raise ValueError('batch_transform(engine.state.batch)[1] must be an ndarray or tensor.')
+            for idx in self.index:
+                plot_2d_or_3d_image(show_labels, step, self._writer, idx,
+                                    self.max_channels, self.max_frames, 'input_1_' + str(idx))
+
+        show_outputs = self.output_transform(engine.state.output)
+        if torch.is_tensor(show_outputs):
+            show_outputs = show_outputs.detach().cpu().numpy()
+        if show_outputs is not None:
+            if not isinstance(show_outputs, np.ndarray):
+                raise ValueError('output_transform(engine.state.output) must be an ndarray or tensor.')
+            for idx in self.index:
+                plot_2d_or_3d_image(show_outputs, step, self._writer, idx,
+                                    self.max_channels, self.max_frames, 'output_' + str(idx))
+
+        self._writer.flush()
 
 
 def main():
@@ -244,13 +397,27 @@ def main():
                                   to_save={'net': net, 'opt': opt})
 
     # StatsHandler prints loss at every iteration and print metrics at every epoch
-    train_stats_handler = StatsHandler(name='trainer')
+    train_stats_handler = StatsHandler(iteration_print_logger=my_iteration_print_logger,
+                                       name='trainer'
+                                       )
     train_stats_handler.attach(trainer)
 
     # TensorBoardStatsHandler plots loss at every iteration and plots metrics at every epoch, same as StatsHandler
     writer_train = SummaryWriter(log_dir=os.path.join(out_model_dir, "train"))
     train_tensorboard_stats_handler = TensorBoardStatsHandler(summary_writer=writer_train)
     train_tensorboard_stats_handler.attach(trainer)
+
+    train_tensorboard_image_handler = MyTensorBoardImageHandler(
+        summary_writer=writer_train,
+        batch_transform=lambda batch: (batch['img'], batch['seg']),
+        output_transform=lambda output: None,
+        global_iter_transform=lambda x: trainer.state.iteration,
+        index=range(0, 6)
+    )
+    # trainer.add_event_handler(
+    #     event_name=Events.ITERATION_COMPLETED(once=17089), handler=train_tensorboard_image_handler)
+    trainer.add_event_handler(
+        event_name=Events.ITERATION_COMPLETED(every=1), handler=train_tensorboard_image_handler)
 
     if lr_decay is not None:
         print("Using Exponential LR decay")

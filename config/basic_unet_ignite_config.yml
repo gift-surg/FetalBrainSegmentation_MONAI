@@ -10,7 +10,7 @@ training:
   validation_every_n_epochs: 20
   sliding_window_validation: True
   lr: 1e-3
-  lr_decay: 0.999
+  lr_decay: null
   manual_seed: 0
 
 data:
@@ -27,10 +27,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds"
-  output_subfix: "manual_seed_0_lr_scheduler"
+  output_subfix: "manual_seed_0_train_batch_tensorboard_it17088"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Testing effect or LR scheduler (decay = 0.999) on optimisation stability - deterministic training (seed = 0)"
+  message: "Plotting batch elements to tensorboard at failing iteration 17088 - deterministic training (seed = 0), no LR scheduler"
