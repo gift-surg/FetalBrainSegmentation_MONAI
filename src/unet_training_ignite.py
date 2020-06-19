@@ -30,6 +30,7 @@ import logging
 
 from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
+from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
 
 DEFAULT_KEY_VAL_FORMAT = '{}: {:.4f} '
 DEFAULT_TAG = 'Loss'
@@ -308,9 +309,9 @@ def main():
                               shuffle=True, num_workers=num_workers,
                               collate_fn=list_data_collate,
                               pin_memory=torch.cuda.is_available())
-    # check_train_data = monai.utils.misc.first(train_loader)
-    # print("Training data tensor shapes")
-    # print(check_train_data['img'].shape, check_train_data['seg'].shape)
+    check_train_data = monai.utils.misc.first(train_loader)
+    print("Training data tensor shapes")
+    print(check_train_data['img'].shape, check_train_data['seg'].shape)
 
     # data preprocessing for validation:
     # - convert data to right format [batch, channel, dim, dim, dim]
@@ -349,9 +350,9 @@ def main():
                             shuffle=do_shuffle,
                             collate_fn=collate_fn_to_use,
                             num_workers=num_workers)
-    # check_valid_data = monai.utils.misc.first(val_loader)
-    # print("Validation data tensor shapes")
-    # print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
+    check_valid_data = monai.utils.misc.first(val_loader)
+    print("Validation data tensor shapes")
+    print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
 
     """
     Network preparation
@@ -379,8 +380,12 @@ def main():
     def prepare_batch(batch, device=None, non_blocking=False):
         return _prepare_batch((batch['img'], batch['seg']), device, non_blocking)
 
-    trainer = create_supervised_trainer(model=net, optimizer=opt, loss_fn=loss_function,
-                                        device=device, non_blocking=False, prepare_batch=prepare_batch)
+    trainer = create_supervised_trainer_with_clipping(model=net, optimizer=opt, loss_fn=loss_function,
+                                                      device=device, non_blocking=False, prepare_batch=prepare_batch,
+                                                      clip_norm=None)
+    print("GRADIENT CLIPPING NOT APPLIED")
+    # trainer = create_supervised_trainer(model=net, optimizer=opt, loss_fn=loss_function,
+    #                                     device=device, non_blocking=False, prepare_batch=prepare_batch)
 
     # adding checkpoint handler to save models (network params and optimizer stats) during training
     if model_to_load is not None:
@@ -407,17 +412,15 @@ def main():
     train_tensorboard_stats_handler = TensorBoardStatsHandler(summary_writer=writer_train)
     train_tensorboard_stats_handler.attach(trainer)
 
-    train_tensorboard_image_handler = MyTensorBoardImageHandler(
-        summary_writer=writer_train,
-        batch_transform=lambda batch: (batch['img'], batch['seg']),
-        output_transform=lambda output: None,
-        global_iter_transform=lambda x: trainer.state.iteration,
-        index=range(0, 6)
-    )
+    # train_tensorboard_image_handler = MyTensorBoardImageHandler(
+    #     summary_writer=writer_train,
+    #     batch_transform=lambda batch: (batch['img'], batch['seg']),
+    #     output_transform=lambda output: None,
+    #     global_iter_transform=lambda x: trainer.state.iteration,
+    #     index=range(0, 6)
+    # )
     # trainer.add_event_handler(
-    #     event_name=Events.ITERATION_COMPLETED(once=17089), handler=train_tensorboard_image_handler)
-    trainer.add_event_handler(
-        event_name=Events.ITERATION_COMPLETED(every=1), handler=train_tensorboard_image_handler)
+    #     event_name=Events.ITERATION_COMPLETED(every=17088), handler=train_tensorboard_image_handler)
 
     if lr_decay is not None:
         print("Using Exponential LR decay")
@@ -435,21 +438,15 @@ def main():
         "Mean_Dice": MeanDice(add_sigmoid=True, to_onehot_y=False)
     }
 
-    def _sliding_window_processor(engine, batch):
-        net.eval()
-        with torch.no_grad():
-            val_images, val_labels = batch['img'].to(device), batch['seg'].to(device)
-            roi_size = (96, 96, 1)
-            seg_probs = sliding_window_inference(val_images, roi_size, batch_size_valid, net)
-            return seg_probs, val_labels
-
     if sliding_window_validation:
-        # use sliding window inference at validation
-        print("3D evaluator is used")
-        net.to(device)
-        evaluator = Engine(_sliding_window_processor)
-        for name, metric in val_metrics.items():
-            metric.attach(evaluator, name)
+        # function to manage validation with sliding window inference
+        def prepare_sliding_window_inference(x, model):
+            return sliding_window_inference(inputs=x, roi_size=(96, 96, 1), sw_batch_size=batch_size_valid,
+                                            predictor=model)
+
+        evaluator = create_evaluator_with_sliding_window(model=net, metrics=val_metrics, device=device,
+                                                         non_blocking=True, prepare_batch=prepare_batch,
+                                                         sliding_window_inference=prepare_sliding_window_inference)
     else:
         # ignite evaluator expects batch=(img, seg) and returns output=(y_pred, y) at every iteration,
         # user can add output_transform to return other values
