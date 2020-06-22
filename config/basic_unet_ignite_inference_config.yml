@@ -1,0 +1,28 @@
+device:
+  cuda_device: 2
+  num_workers: 1
+
+inference:
+  batch_size_inference: 1
+  probability_threshold: 0.5
+  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/2020-06-19_15-36-56_plot_gradient_norm_clipping2/net_checkpoint_19200.pth"
+
+data:
+  data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB1",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB2",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupC",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupD",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupE",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupF"]
+  inference_list: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_h_files.txt",
+                  "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_p1_files.txt",
+                  "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_p2_files.txt",
+                  "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_C_files.txt",
+                  "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_D_files.txt",
+                  "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_E_files.txt",
+                  "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_F_files.txt"]
+
+output:
+  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/2020-06-19_15-36-56_plot_gradient_norm_clipping2/inference_with_postprocessing"
+  out_postfix: "seg"
