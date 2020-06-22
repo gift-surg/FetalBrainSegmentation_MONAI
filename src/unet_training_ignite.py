@@ -380,12 +380,11 @@ def main():
     def prepare_batch(batch, device=None, non_blocking=False):
         return _prepare_batch((batch['img'], batch['seg']), device, non_blocking)
 
+    clipping = 2.0
     trainer = create_supervised_trainer_with_clipping(model=net, optimizer=opt, loss_fn=loss_function,
                                                       device=device, non_blocking=False, prepare_batch=prepare_batch,
-                                                      clip_norm=None)
-    print("GRADIENT CLIPPING NOT APPLIED")
-    # trainer = create_supervised_trainer(model=net, optimizer=opt, loss_fn=loss_function,
-    #                                     device=device, non_blocking=False, prepare_batch=prepare_batch)
+                                                      clip_norm=clipping)
+    print("Using gradient norm clipping at max = {}".format(clipping))
 
     # adding checkpoint handler to save models (network params and optimizer stats) during training
     if model_to_load is not None:
@@ -439,11 +438,12 @@ def main():
     }
 
     if sliding_window_validation:
+
         # function to manage validation with sliding window inference
         def prepare_sliding_window_inference(x, model):
             return sliding_window_inference(inputs=x, roi_size=(96, 96, 1), sw_batch_size=batch_size_valid,
                                             predictor=model)
-
+        print("3D evaluator is used")
         evaluator = create_evaluator_with_sliding_window(model=net, metrics=val_metrics, device=device,
                                                          non_blocking=True, prepare_batch=prepare_batch,
                                                          sliding_window_inference=prepare_sliding_window_inference)
@@ -493,6 +493,22 @@ def main():
         )
         evaluator.add_event_handler(
             event_name=Events.ITERATION_COMPLETED(every=1), handler=val_tensorboard_image_handler)
+
+    # get the network gradients and add them to tensorboard
+    @trainer.on(Events.ITERATION_COMPLETED(every=1))
+    def get_network_gradient(engine):
+        parameters = net.parameters()
+        if isinstance(parameters, torch.Tensor):
+            parameters = [parameters]
+        parameters = list(filter(lambda p: p.grad is not None, parameters))
+        norm_type = float(2)
+        total_norm = 0
+        for p in parameters:
+            param_norm = p.grad.data.norm(norm_type)
+            total_norm += param_norm.item() ** norm_type
+        total_norm = total_norm ** (1. / norm_type)
+        print("Total norm = {}".format(total_norm))
+        writer_train.add_scalar("Gradient_norm", total_norm, engine.state.iteration)
 
     """
     Run training
