@@ -228,6 +228,10 @@ def main():
         seed = config_info['training']['manual_seed']
     else:
         seed = None
+    # optimiser params
+    optimiser_choice = config_info['training']['optimiser_choice']
+    opt_momentum = config_info['training']['opt_momentum']
+    clipping = config_info['training']['gradient_clipping']
     # data params
     data_root = config_info['data']['data_root']
     training_list = config_info['data']['training_list']
@@ -368,7 +372,20 @@ def main():
     )
 
     loss_function = monai.losses.DiceLoss(do_sigmoid=True)
-    opt = torch.optim.Adam(net.parameters(), lr)
+    if optimiser_choice in ("Adam", "adam"):
+        opt = torch.optim.Adam(net.parameters(), lr)
+        print("[OPTIMISER] Using Adam")
+    elif optimiser_choice in ("SGD", "sgd"):
+        opt = torch.optim.SGD(net.parameters(), lr=lr)
+        print("[OPTIMISER] Using Vanilla SGD")
+    elif optimiser_choice in ("SGDMomentum", "sgdmomentum", "SGD_Momentum"):
+        momentum = opt_momentum if not None else 0.9
+        opt = torch.optim.SGD(net.parameters(), lr=lr, momentum=momentum)
+        print("[OPTIMISER]Using SDG with momentum = {}".format(momentum))
+    else:
+        print("[OPTIMISER] WARNING: Invalid optimiser choice, using Adam by default")
+        opt = torch.optim.Adam(net.parameters(), lr)
+
     device = torch.cuda.current_device()
     if lr_decay is not None:
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=opt, gamma=lr_decay, last_epoch=-1)
@@ -380,7 +397,6 @@ def main():
     def prepare_batch(batch, device=None, non_blocking=False):
         return _prepare_batch((batch['img'], batch['seg']), device, non_blocking)
 
-    clipping = 2.0
     trainer = create_supervised_trainer_with_clipping(model=net, optimizer=opt, loss_fn=loss_function,
                                                       device=device, non_blocking=False, prepare_batch=prepare_batch,
                                                       clip_norm=clipping)
@@ -507,7 +523,7 @@ def main():
             param_norm = p.grad.data.norm(norm_type)
             total_norm += param_norm.item() ** norm_type
         total_norm = total_norm ** (1. / norm_type)
-        print("Total norm = {}".format(total_norm))
+        # print("Total norm = {}".format(total_norm))
         writer_train.add_scalar("Gradient_norm", total_norm, engine.state.iteration)
 
     """

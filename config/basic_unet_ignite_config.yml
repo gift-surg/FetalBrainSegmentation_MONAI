@@ -9,6 +9,9 @@ training:
   nr_train_epochs: 600
   validation_every_n_epochs: 20
   sliding_window_validation: True
+  optimiser_choice: "Adam"
+  opt_momentum: null
+  gradient_clipping: null
   lr: 1e-3
   lr_decay: null
   manual_seed: 0
@@ -27,10 +30,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds"
-  output_subfix: "plot_gradient_norm_clipping2_run2"
+  output_subfix: "Adam_stepsize"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Plotting to tensorboard the norm of the gradients - Using clipping at max_norm = 2.0 - second run test determinism"
+  message: "Run with fixed manual seed and Adam"
