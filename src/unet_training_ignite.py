@@ -519,12 +519,18 @@ def main():
         parameters = list(filter(lambda p: p.grad is not None, parameters))
         norm_type = float(2)
         total_norm = 0
-        for p in parameters:
+        for idx, p in enumerate(parameters):
+            # TODO add name to each layer so gradients can be mapped (use p.name instead of grad_{})
+            writer_train.add_histogram("grad_{}".format(idx), p.grad, engine.state.iteration)
             param_norm = p.grad.data.norm(norm_type)
             total_norm += param_norm.item() ** norm_type
         total_norm = total_norm ** (1. / norm_type)
         # print("Total norm = {}".format(total_norm))
-        writer_train.add_scalar("Gradient_norm", total_norm, engine.state.iteration)
+        max_gradient = max(p.grad.data.max() for p in parameters)
+        min_gradient = min(p.grad.data.min() for p in parameters)
+        writer_train.add_scalar("Total_Gradient_norm", total_norm, engine.state.iteration)
+        writer_train.add_scalar("Max_Gradient", max_gradient, engine.state.iteration)
+        writer_train.add_scalar("Min_Gradient", min_gradient, engine.state.iteration)
 
     """
     Run training
