@@ -12,6 +12,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from ignite.engine import Engine, Events, create_supervised_trainer, create_supervised_evaluator, _prepare_batch
 from ignite.handlers import ModelCheckpoint, EarlyStopping
+from torchsummary import summary
 
 sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
@@ -31,6 +32,7 @@ import logging
 from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
+from custom_unet import CustomUNet
 
 DEFAULT_KEY_VAL_FORMAT = '{}: {:.4f} '
 DEFAULT_TAG = 'Loss'
@@ -361,7 +363,7 @@ def main():
     """
     Network preparation
     """
-    # Create UNet, DiceLoss and Adam optimizer.
+    # # Create UNet, DiceLoss and Adam optimizer.
     net = monai.networks.nets.UNet(
         dimensions=2,
         in_channels=1,
@@ -370,6 +372,9 @@ def main():
         strides=(2, 2, 2, 2),
         num_res_units=2,
     )
+    # net = CustomUNet()
+    print("Model summary:")
+    summary(net, input_data=(1, 96, 96))
 
     loss_function = monai.losses.DiceLoss(do_sigmoid=True)
     if optimiser_choice in ("Adam", "adam"):
@@ -520,8 +525,8 @@ def main():
         norm_type = float(2)
         total_norm = 0
         for idx, p in enumerate(parameters):
-            # TODO add name to each layer so gradients can be mapped (use p.name instead of grad_{})
-            writer_train.add_histogram("grad_{}".format(idx), p.grad, engine.state.iteration)
+            # # TODO add name to each layer so gradients can be mapped (use p.name instead of grad_{})
+            # writer_train.add_histogram("grad_{}".format(idx), p.grad, engine.state.iteration)
             param_norm = p.grad.data.norm(norm_type)
             total_norm += param_norm.item() ** norm_type
         total_norm = total_norm ** (1. / norm_type)
