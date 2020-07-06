@@ -3,10 +3,10 @@ device:
   num_workers: 4
 
 training:
-  loss_type: "Dice"
+  loss_type: "Xent"
   batch_size_train: 10
   batch_size_valid: 1
-  nr_train_epochs: 600
+  nr_train_epochs: 10000
   validation_every_n_epochs: 20
   sliding_window_validation: True
   optimiser_choice: "Adam"
@@ -30,10 +30,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds"
-  output_subfix: "Adam_gradient_plotting"
+  output_subfix: "MONAI_unet_Dice_Xent_corrected_validation_10000"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Run with fixed manual seed and Adam, checking the gradients at each iteration"
+  message: "Run with fixed seed and MONAI UNet with 2 res units - test whether Xent gives better training stability, longer run"

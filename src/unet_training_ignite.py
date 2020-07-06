@@ -13,6 +13,7 @@ from torch.utils.tensorboard import SummaryWriter
 from ignite.engine import Engine, Events, create_supervised_trainer, create_supervised_evaluator, _prepare_batch
 from ignite.handlers import ModelCheckpoint, EarlyStopping
 from torchsummary import summary
+from torch.nn.modules.loss import BCEWithLogitsLoss, BCELoss
 
 sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
@@ -33,6 +34,8 @@ from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
 from custom_unet import CustomUNet
+from custom_losses import DiceAndBinaryXentLoss
+from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric
 
 DEFAULT_KEY_VAL_FORMAT = '{}: {:.4f} '
 DEFAULT_TAG = 'Loss'
@@ -254,6 +257,9 @@ def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
     torch.cuda.set_device(cuda_device)
+    print("\n#### GPU INFORMATION ###")
+    print(f"Using device number: {torch.cuda.current_device()}, name: {torch.cuda.get_device_name()}")
+    print(f"Device available: {torch.cuda.is_available()}\n")
     if seed is not None:
         # set manual seed if required (both numpy and torch)
         set_determinism(seed=seed)
@@ -376,7 +382,9 @@ def main():
     print("Model summary:")
     summary(net, input_data=(1, 96, 96))
 
-    loss_function = monai.losses.DiceLoss(do_sigmoid=True)
+    # loss_function = monai.losses.DiceLoss(do_sigmoid=True)
+    loss_function = DiceAndBinaryXentLoss(do_sigmoid=True)
+    # loss_function = BCEWithLogitsLoss(reduction="mean")
     if optimiser_choice in ("Adam", "adam"):
         opt = torch.optim.Adam(net.parameters(), lr)
         print("[OPTIMISER] Using Adam")
@@ -391,7 +399,7 @@ def main():
         print("[OPTIMISER] WARNING: Invalid optimiser choice, using Adam by default")
         opt = torch.optim.Adam(net.parameters(), lr)
 
-    device = torch.cuda.current_device()
+    current_device = torch.cuda.current_device()
     if lr_decay is not None:
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=opt, gamma=lr_decay, last_epoch=-1)
 
@@ -400,10 +408,10 @@ def main():
     """
     # function to manage batch at training
     def prepare_batch(batch, device=None, non_blocking=False):
-        return _prepare_batch((batch['img'], batch['seg']), device, non_blocking)
+        return _prepare_batch((batch['img'].to(device), batch['seg'].to(device)), device, non_blocking)
 
     trainer = create_supervised_trainer_with_clipping(model=net, optimizer=opt, loss_fn=loss_function,
-                                                      device=device, non_blocking=False, prepare_batch=prepare_batch,
+                                                      device=current_device, non_blocking=False, prepare_batch=prepare_batch,
                                                       clip_norm=clipping)
     print("Using gradient norm clipping at max = {}".format(clipping))
 
@@ -454,7 +462,9 @@ def main():
     metric_name = 'Mean_Dice'
     # add evaluation metric to the evaluator engine
     val_metrics = {
-        "Loss": 1.0 - MeanDice(add_sigmoid=True, to_onehot_y=False),
+        # "Loss": BinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
+        "Loss": MeanDiceAndBinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
+        # "Loss": 1.0 - MeanDice(add_sigmoid=True, to_onehot_y=False),
         "Mean_Dice": MeanDice(add_sigmoid=True, to_onehot_y=False)
     }
 
@@ -465,14 +475,14 @@ def main():
             return sliding_window_inference(inputs=x, roi_size=(96, 96, 1), sw_batch_size=batch_size_valid,
                                             predictor=model)
         print("3D evaluator is used")
-        evaluator = create_evaluator_with_sliding_window(model=net, metrics=val_metrics, device=device,
+        evaluator = create_evaluator_with_sliding_window(model=net, metrics=val_metrics, device=current_device,
                                                          non_blocking=True, prepare_batch=prepare_batch,
                                                          sliding_window_inference=prepare_sliding_window_inference)
     else:
         # ignite evaluator expects batch=(img, seg) and returns output=(y_pred, y) at every iteration,
         # user can add output_transform to return other values
         print("2D evaluator is used")
-        evaluator = create_supervised_evaluator(model=net, metrics=val_metrics, device=device,
+        evaluator = create_supervised_evaluator(model=net, metrics=val_metrics, device=current_device,
                                                 non_blocking=True, prepare_batch=prepare_batch)
 
     epoch_len = len(train_ds) // train_loader.batch_size
