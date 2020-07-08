@@ -34,8 +34,8 @@ from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
 from custom_unet import CustomUNet
-from custom_losses import DiceAndBinaryXentLoss
-from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric
+from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth
+from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric, TverskyMetric
 
 DEFAULT_KEY_VAL_FORMAT = '{}: {:.4f} '
 DEFAULT_TAG = 'Loss'
@@ -382,9 +382,29 @@ def main():
     print("Model summary:")
     summary(net, input_data=(1, 96, 96))
 
-    # loss_function = monai.losses.DiceLoss(do_sigmoid=True)
-    loss_function = DiceAndBinaryXentLoss(do_sigmoid=True)
-    # loss_function = BCEWithLogitsLoss(reduction="mean")
+    smooth = None
+    if loss_type == "Dice":
+        loss_function = monai.losses.DiceLoss(do_sigmoid=True)
+        smooth = 1.0
+        print(f"[LOSS] Using monai.losses.DiceLoss with smooth = {smooth}")
+    elif loss_type == "Xent":
+        loss_function = BCEWithLogitsLoss(reduction="mean")
+        print("[LOSS] Using BCEWithLogitsLoss")
+    elif loss_type == "Dice_nosmooth":
+        loss_function = DiceLoss_noSmooth(do_sigmoid=True)
+        print("[LOSS] Using Custom loss, Dice with no smooth at numerator")
+    elif loss_type == "Tversky":
+        loss_function = monai.losses.TverskyLoss(do_sigmoid=True)
+        print("[LOSS] Using monai.losses.TverskyLoss")
+    elif loss_type == "Tversky_nosmooth":
+        loss_function = TverskyLoss_noSmooth(do_sigmoid=True)
+        print("[LOSS] Using Custom loss, Tversky with no smooth at numerator")
+    elif loss_type == "Dice_Xent":
+        loss_function = DiceAndBinaryXentLoss(do_sigmoid=True)
+        print("[LOSS] Using Custom loss, Dice + Xent")
+    else:
+        raise IOError("Unrecognized loss type")
+
     if optimiser_choice in ("Adam", "adam"):
         opt = torch.optim.Adam(net.parameters(), lr)
         print("[OPTIMISER] Using Adam")
@@ -412,7 +432,7 @@ def main():
 
     trainer = create_supervised_trainer_with_clipping(model=net, optimizer=opt, loss_fn=loss_function,
                                                       device=current_device, non_blocking=False, prepare_batch=prepare_batch,
-                                                      clip_norm=clipping)
+                                                      clip_norm=clipping, smooth_loss=smooth)
     print("Using gradient norm clipping at max = {}".format(clipping))
 
     # adding checkpoint handler to save models (network params and optimizer stats) during training
@@ -463,8 +483,9 @@ def main():
     # add evaluation metric to the evaluator engine
     val_metrics = {
         # "Loss": BinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
-        "Loss": MeanDiceAndBinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
-        # "Loss": 1.0 - MeanDice(add_sigmoid=True, to_onehot_y=False),
+        # "Loss": MeanDiceAndBinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
+        "Loss": 1.0 - MeanDice(add_sigmoid=True, to_onehot_y=False),
+        # "Loss": TverskyMetric(add_sigmoid=True, to_onehot_y=False),
         "Mean_Dice": MeanDice(add_sigmoid=True, to_onehot_y=False)
     }
 

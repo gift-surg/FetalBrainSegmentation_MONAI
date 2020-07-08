@@ -38,6 +38,7 @@ from custom_ignite_engines import create_evaluator_with_sliding_window
 sys.path.append("/mnt/data/mranzini/Code/Demic-v0.1")
 from Demic.util.image_process import *
 
+
 def main():
     """
     Read input and configuration parameters

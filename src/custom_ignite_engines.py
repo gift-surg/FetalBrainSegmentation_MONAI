@@ -10,7 +10,7 @@ def create_supervised_trainer_with_clipping(model, optimizer, loss_fn,
                                             device=None, non_blocking=False,
                                             prepare_batch=_prepare_batch,
                                             output_transform=lambda x, y, y_pred, loss: loss.item(),
-                                            clip_norm=None):
+                                            clip_norm=None, smooth_loss=None):
     """
     Factory function for creating a trainer for supervised models with possibility to define gradient clipping.
 
@@ -42,7 +42,11 @@ def create_supervised_trainer_with_clipping(model, optimizer, loss_fn,
         optimizer.zero_grad()
         x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
         y_pred = model(x)
-        loss = loss_fn(y_pred, y)
+        if smooth_loss is not None:
+            print(f"Using smooth = {smooth_loss}")
+            loss = loss_fn(y_pred, y, smooth=smooth_loss)
+        else:
+            loss = loss_fn(y_pred, y)
         loss.backward()
         if clip_norm is not None:
             try:
