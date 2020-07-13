@@ -43,7 +43,6 @@ def create_supervised_trainer_with_clipping(model, optimizer, loss_fn,
         x, y = prepare_batch(batch, device=device, non_blocking=non_blocking)
         y_pred = model(x)
         if smooth_loss is not None:
-            print(f"Using smooth = {smooth_loss}")
             loss = loss_fn(y_pred, y, smooth=smooth_loss)
         else:
             loss = loss_fn(y_pred, y)

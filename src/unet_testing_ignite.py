@@ -58,6 +58,7 @@ def main():
     cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']
     # inference params
+    nr_out_channels = config_info['inference']['nr_out_channels']
     batch_size_inference = config_info['inference']['batch_size_inference']
     # temporary check as sliding window inference does not accept higher batch size
     assert batch_size_inference == 1
@@ -117,7 +118,7 @@ def main():
     net = monai.networks.nets.UNet(
         dimensions=2,
         in_channels=1,
-        out_channels=1,
+        out_channels=nr_out_channels,
         channels=(16, 32, 64, 128, 256),
         strides=(2, 2, 2, 2),
         num_res_units=2,
@@ -141,10 +142,10 @@ def main():
             val_outputs_resized = torch.nn.functional.interpolate(val_outputs, size=orig_size[2:], mode='nearest')
             # add post-processing
             val_outputs_resized = val_outputs_resized.detach().cpu().numpy()
-            strt = ndimage.generate_binary_structure(3, 2)
-            post = padded_binary_closing(np.squeeze(val_outputs_resized), strt)
-            post = get_largest_component(post)
-            val_outputs_resized = val_outputs_resized * post
+            # strt = ndimage.generate_binary_structure(3, 2)
+            # post = padded_binary_closing(np.squeeze(val_outputs_resized), strt)
+            # post = get_largest_component(post)
+            # val_outputs_resized = val_outputs_resized * post
             # return val_outputs_resized, val_labels
             return val_outputs_resized
 

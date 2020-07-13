@@ -36,6 +36,7 @@ from custom_ignite_engines import create_supervised_trainer_with_clipping, creat
 from custom_unet import CustomUNet
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth
 from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric, TverskyMetric
+from custom_transform import ConverToOneHotd
 
 DEFAULT_KEY_VAL_FORMAT = '{}: {:.4f} '
 DEFAULT_TAG = 'Loss'
@@ -213,6 +214,13 @@ def main():
     cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']
     # training and validation params
+    if 'seg_labels' in config_info['training'].keys():
+        seg_labels = config_info['training']['seg_labels']
+        print(seg_labels)
+    else:
+        seg_labels = [1]
+    nr_out_channels = len(seg_labels)
+    print("Considering the following {} labels in the segmentation: {}".format(nr_out_channels, seg_labels))
     loss_type = config_info['training']['loss_type']
     batch_size_train = config_info['training']['batch_size_train']
     batch_size_valid = config_info['training']['batch_size_valid']
@@ -295,6 +303,7 @@ def main():
 
     # data preprocessing for training:
     # - convert data to right format [batch, channel, dim, dim, dim]
+    # - convert segmentation to OneHot
     # - apply whitening
     # - resize to (96, 96) in-plane (preserve z-direction)
     # - define 2D patches to be extracted
@@ -302,7 +311,8 @@ def main():
     # - squeeze to 2D
     train_transforms = Compose([
         LoadNiftid(keys=['img', 'seg']),
-        AddChanneld(keys=['img', 'seg']),
+        ConverToOneHotd(keys=['seg'], labels=seg_labels),
+        AddChanneld(keys=['img']),
         NormalizeIntensityd(keys=['img']),
         Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
         RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
@@ -332,7 +342,8 @@ def main():
     if sliding_window_validation:
         val_transforms = Compose([
             LoadNiftid(keys=['img', 'seg']),
-            AddChanneld(keys=['img', 'seg']),
+            ConverToOneHotd(keys=['seg'], labels=seg_labels),
+            AddChanneld(keys=['img']),
             NormalizeIntensityd(keys=['img']),
             Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
             ToTensord(keys=['img', 'seg'])
@@ -343,7 +354,8 @@ def main():
         # - add extraction of 2D slices from validation set to emulate how loss is computed at training
         val_transforms = Compose([
             LoadNiftid(keys=['img', 'seg']),
-            AddChanneld(keys=['img', 'seg']),
+            ConverToOneHotd(keys=['seg'], labels=seg_labels),
+            AddChanneld(keys=['img']),
             NormalizeIntensityd(keys=['img']),
             Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
             RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
@@ -373,7 +385,7 @@ def main():
     net = monai.networks.nets.UNet(
         dimensions=2,
         in_channels=1,
-        out_channels=1,
+        out_channels=nr_out_channels,
         channels=(16, 32, 64, 128, 256),
         strides=(2, 2, 2, 2),
         num_res_units=2,
@@ -383,25 +395,31 @@ def main():
     summary(net, input_data=(1, 96, 96))
 
     smooth = None
+    if nr_out_channels == 1:
+        do_sigmoid = True
+        do_softmax = False
+    elif nr_out_channels > 1:
+        do_sigmoid = False
+        do_softmax = True
     if loss_type == "Dice":
-        loss_function = monai.losses.DiceLoss(do_sigmoid=True)
-        smooth = 1.0
-        print(f"[LOSS] Using monai.losses.DiceLoss with smooth = {smooth}")
+        loss_function = monai.losses.DiceLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        smooth = 1e-5
+        print(f"[LOSS] Using monai.losses.DiceLoss with smooth = {smooth}, do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
     elif loss_type == "Xent":
         loss_function = BCEWithLogitsLoss(reduction="mean")
         print("[LOSS] Using BCEWithLogitsLoss")
     elif loss_type == "Dice_nosmooth":
-        loss_function = DiceLoss_noSmooth(do_sigmoid=True)
-        print("[LOSS] Using Custom loss, Dice with no smooth at numerator")
+        loss_function = DiceLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        print(f"[LOSS] Using Custom loss, Dice with no smooth at numerator, do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
     elif loss_type == "Tversky":
-        loss_function = monai.losses.TverskyLoss(do_sigmoid=True)
-        print("[LOSS] Using monai.losses.TverskyLoss")
+        loss_function = monai.losses.TverskyLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        print(f"[LOSS] Using monai.losses.TverskyLoss with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
     elif loss_type == "Tversky_nosmooth":
-        loss_function = TverskyLoss_noSmooth(do_sigmoid=True)
-        print("[LOSS] Using Custom loss, Tversky with no smooth at numerator")
+        loss_function = TverskyLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        print(f"[LOSS] Using Custom loss, Tversky with no smooth at numerator with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
     elif loss_type == "Dice_Xent":
-        loss_function = DiceAndBinaryXentLoss(do_sigmoid=True)
-        print("[LOSS] Using Custom loss, Dice + Xent")
+        loss_function = DiceAndBinaryXentLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        print(f"[LOSS] Using Custom loss, Dice + Xent with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
     else:
         raise IOError("Unrecognized loss type")
 
