@@ -1,16 +1,20 @@
 device:
-  cuda_device: 1
+  cuda_device: 2
   num_workers: 4
 
 training:
-  loss_type: "Dice"
+  seg_labels: [1]
+  loss_type: "Dice_Xent"
   batch_size_train: 10
   batch_size_valid: 1
-  nr_train_epochs: 600
+  nr_train_epochs: 10000
   validation_every_n_epochs: 20
   sliding_window_validation: True
+  optimiser_choice: "Adam"
+  opt_momentum: null
+  gradient_clipping: null
   lr: 1e-3
-  lr_decay: 0.999
+  lr_decay: null
   manual_seed: 0
 
 data:
@@ -27,10 +31,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds"
-  output_subfix: "manual_seed_0_lr_scheduler"
+  output_subfix: "MONAI_unet_Dice_noSmooth_Xent_it10000"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Testing effect or LR scheduler (decay = 0.999) on optimisation stability - deterministic training (seed = 0)"
+  message: "Run with fixed seed and MONAI UNet with 2 res units, use Xent + my Dice loss without smooth at numerator"
