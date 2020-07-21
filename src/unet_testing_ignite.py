@@ -79,6 +79,9 @@ def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
     torch.cuda.set_device(cuda_device)
+    print("\n#### GPU INFORMATION ###")
+    print(f"Using device number: {torch.cuda.current_device()}, name: {torch.cuda.get_device_name()}")
+    print(f"Device available: {torch.cuda.is_available()}\n")
 
     """
     Data Preparation

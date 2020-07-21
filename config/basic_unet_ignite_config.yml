@@ -3,8 +3,8 @@ device:
   num_workers: 4
 
 training:
-  seg_labels: [0, 1]
-  loss_type: "Dice"
+  seg_labels: [1]
+  loss_type: "Dice_Xent"
   batch_size_train: 10
   batch_size_valid: 1
   nr_train_epochs: 10000
@@ -31,10 +31,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds"
-  output_subfix: "MONAI_unet_Dice_twochannel_smooth1e-5"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_two_channel"
+  output_subfix: "MONAI_unet_Dice_noSmooth_Xent_it10000"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Run with fixed seed and MONAI UNet with 2 res units, use MONAI Dice Loss with smooth (epsilon) = 1e-5 but with two-channel approach"
+  message: "Run with fixed seed and MONAI UNet with 2 res units, use Xent + my Dice loss without smooth at numerator"

@@ -22,6 +22,11 @@ from monai.networks.utils import one_hot
 
 
 class DiceAndBinaryXentLoss(_Loss):
+    """
+    Compute a loss function that combines Dice Loss and Binary Cross Entropy:
+    L = weight_dice * Dice_loss + weight_xent * Xent_loss
+    The weight terms can be set by the user. All other inputs are matched to the inputs of the Dice loss in MONAI
+    """
     def __init__(
             self,
             weight_dice=1.,
@@ -61,11 +66,16 @@ class DiceAndBinaryXentLoss(_Loss):
         self.squared_pred = squared_pred
         self.jaccard = jaccard
 
-        self.dice_loss_fn = monai.losses.DiceLoss(do_sigmoid=self.do_sigmoid,
-                                                  do_softmax=self.do_softmax,
-                                                  squared_pred=self.squared_pred,
-                                                  jaccard=self.jaccard,
-                                                  reduction=reduction)
+        # self.dice_loss_fn = monai.losses.DiceLoss(do_sigmoid=self.do_sigmoid,
+        #                                           do_softmax=self.do_softmax,
+        #                                           squared_pred=self.squared_pred,
+        #                                           jaccard=self.jaccard,
+        #                                           reduction=reduction)
+        self.dice_loss_fn = DiceLoss_noSmooth(do_sigmoid=self.do_sigmoid,
+                                              do_softmax=self.do_softmax,
+                                              squared_pred=self.squared_pred,
+                                              jaccard=self.jaccard,
+                                              reduction=reduction)
 
         if self.do_sigmoid:
             self.xent_fn = BCEWithLogitsLoss(reduction=reduction)
