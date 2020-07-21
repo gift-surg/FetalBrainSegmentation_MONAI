@@ -9,6 +9,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import torch
 import torch.nn.functional as F
 from monai.data.utils import dense_patch_slices
@@ -71,13 +72,15 @@ def sliding_window_inference(inputs, roi_size, sw_batch_size, predictor):
     output_rois = list()
     for data in slice_batches:
         # squeeze dimensions equal to 1
-        orig_size = data.shape
+        orig_size = list(data.shape)
         data_size = list(data.shape[2:])
         for idx_dim in range(2, 2+len(data_size)):
             if data_size[idx_dim-2] == 1:
                 data = torch.squeeze(data, dim=idx_dim)
         seg_prob = predictor(data)  # batched patch segmentation
-        seg_prob = torch.reshape(seg_prob, orig_size)
+        new_size = copy.deepcopy(orig_size)
+        new_size[1] = seg_prob.shape[1]   # keep original data shape, but take channel dimension from the segmentation
+        seg_prob = torch.reshape(seg_prob, new_size)
         output_rois.append(seg_prob)
 
     # stitching output image
