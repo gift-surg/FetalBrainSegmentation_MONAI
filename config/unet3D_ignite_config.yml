@@ -1,0 +1,41 @@
+device:
+  cuda_device: 1
+  num_workers: 4
+
+training:
+  seg_labels: [1]
+  loss_type: "Dice"
+  batch_size_train: 4
+  batch_size_valid: 1
+  patch_size: [128, 128, 8]
+  nr_train_epochs: 10000
+  validation_every_n_epochs: 20
+  sliding_window_validation: True
+  optimiser_choice: "Adam"
+  opt_momentum: null
+  gradient_clipping: null
+  lr: 1e-4
+  lr_decay: null
+  manual_seed: 0
+
+data:
+  data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB1",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB2",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupC",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupD",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupE",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupF"]
+  training_list: "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_train_files.txt"
+  validation_list: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_validation_h_files.txt",
+                    "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_validation_p_files.txt"]
+
+output:
+  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet"
+  output_subfix: "CustomUnet25_Dice_initial_test"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D"
+  max_nr_models_saved: 1
+  val_image_to_tensorboad: False
+
+log:
+  message: "Initial test with customised UNet (anisotropic strides) for heatmap prediction"
