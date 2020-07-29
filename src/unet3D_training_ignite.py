@@ -43,6 +43,7 @@ from monai.transforms import (
     Activationsd,
     AddChanneld,
     NormalizeIntensityd,
+    Resized,
     AsDiscreted,
     Compose,
     KeepLargestConnectedComponentd,
@@ -54,9 +55,10 @@ from monai.transforms import (
 )
 
 from io_utils import create_data_list
-from custom_transform import ConverToOneHotd
+from custom_transform import ConverToOneHotd, MinimumPadd
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
 from custom_unet import CustomUNet25
+from logging_utils import my_iteration_print_logger
 
 
 def main():
@@ -92,7 +94,8 @@ def main():
     loss_type = config_info['training']['loss_type']
     batch_size_train = config_info['training']['batch_size_train']
     batch_size_valid = config_info['training']['batch_size_valid']
-    patch_size = config_info["training"]["patch_size"]
+    inplane_size = config_info["training"]["inplane_size"]
+    outplane_size = config_info["training"]["outplane_size"]
     lr = float(config_info['training']['lr'])
     lr_decay = config_info['training']['lr_decay']
     if lr_decay is not None:
@@ -166,18 +169,22 @@ def main():
     print(val_files[-1])
 
     # data preprocessing for training:
+    # data preprocessing for training:
+    patch_size = inplane_size + [outplane_size]
     train_transforms = Compose(
         [
             LoadNiftid(keys=["img", "seg"]),
-            ConverToOneHotd(keys=['seg'], labels=seg_labels),
-            AddChanneld(keys=['img']),
-            NormalizeIntensityd(keys=['img']),
+            ConverToOneHotd(keys=["seg"], labels=seg_labels),
+            AddChanneld(keys=["img"]),
+            NormalizeIntensityd(keys=["img"]),
+            MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
+            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
             RandCropByPosNegLabeld(
                 keys=["img", "seg"], label_key="seg", spatial_size=patch_size, pos=1, neg=1, num_samples=2
             ),
-            RandRotated(keys=['img', 'seg'], range_x=90, range_y=90, prob=0.5, keep_size=True,
+            RandRotated(keys=["img", "seg"], range_x=90, range_y=90, prob=0.5, keep_size=True,
                         mode=["bilinear", "nearest"]),
-            RandFlipd(keys=['img', 'seg'], spatial_axis=[0, 1]),
+            RandFlipd(keys=["img", "seg"], spatial_axis=[0, 1]),
             ToTensord(keys=["img", "seg"]),
         ]
     )
@@ -200,6 +207,8 @@ def main():
             ConverToOneHotd(keys=['seg'], labels=seg_labels),
             AddChanneld(keys=['img']),
             NormalizeIntensityd(keys=['img']),
+            MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
+            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
             ToTensord(keys=['img', 'seg'])
         ]
     )
@@ -210,6 +219,9 @@ def main():
                                        batch_size=batch_size_valid,
                                        shuffle=False,
                                        num_workers=num_workers)
+    check_valid_data = monai.utils.misc.first(val_loader)
+    print("Validation data tensor shapes")
+    print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
 
     """
     Network preparation
@@ -274,7 +286,8 @@ def main():
     )
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
-        TensorBoardStatsHandler(log_dir=os.path.join(out_model_dir, "valid"), output_transform=lambda x: None),
+        TensorBoardStatsHandler(log_dir=os.path.join(out_model_dir, "valid"), output_transform=lambda x: None,
+                                global_epoch_transform=lambda x: trainer.state.iteration),
         CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net}, save_key_metric=True),
     ]
     if val_image_to_tensorboad:
@@ -313,8 +326,12 @@ def main():
     train_handlers = [
         ValidationHandler(validator=evaluator, interval=validation_every_n_iters, epoch_level=False),
         StatsHandler(tag_name="train_loss", output_transform=lambda x: x["loss"]),
-        TensorBoardStatsHandler(log_dir=os.path.join(out_model_dir, "train"), tag_name="Loss", output_transform=lambda x: x["loss"]),
-        CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net, "opt": opt}, save_interval=2, epoch_level=True,
+        TensorBoardStatsHandler(log_dir=os.path.join(out_model_dir, "train"), tag_name="Loss",
+                                output_transform=lambda x: x["loss"],
+                                global_epoch_transform=lambda x: trainer.state.iteration),
+        CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net, "opt": opt},
+                        save_final=True, save_key_metric=True, key_metric_name='Mean_dice', key_metric_n_saved=1,
+                        save_interval=2, epoch_level=True,
                         n_saved=max_nr_models_saved),
     ]
 

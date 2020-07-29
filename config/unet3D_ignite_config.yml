@@ -7,7 +7,8 @@ training:
   loss_type: "Dice"
   batch_size_train: 4
   batch_size_valid: 1
-  patch_size: [128, 128, 8]
+  inplane_size: [96, 96]
+  outplane_size: 36
   nr_train_epochs: 10000
   validation_every_n_epochs: 20
   sliding_window_validation: True
@@ -32,7 +33,7 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet"
-  output_subfix: "CustomUnet25_Dice_initial_test"
+  output_subfix: "CustomUnet25_Dice_inplaneResize_outplaneCrop"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False

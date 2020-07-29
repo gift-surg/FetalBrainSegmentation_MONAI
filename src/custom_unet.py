@@ -195,3 +195,63 @@ class CustomUNet25(nn.Module):
         out = self.conv_out(conv_up0)
 
         return out
+
+
+class ShallowUNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.dimensions = 3
+        self.in_channels = 1
+        self.out_channels = 1
+        self.channels = (64, 128, 256)
+        self.strides = ([4, 4, 2], [4, 4, 3], [1, 1, 1])
+        self.kernel_size = 3
+        self.up_kernel_size = 3
+        self.act = Act.PRELU
+        self.norm = Norm.INSTANCE
+        self.dropout = 0
+
+        assert len(self.channels) == len(self.strides)
+
+        # encoding layers
+        self.conv_down0 = Convolution(self.dimensions, self.in_channels, self.channels[0], self.strides[0],
+                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+        self.conv_down1 = Convolution(self.dimensions, self.channels[0], self.channels[1], self.strides[1],
+                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+        self.conv_bottom = Convolution(self.dimensions, self.channels[1], self.channels[2], self.strides[2],
+                                       kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+
+        # decoding layers
+        self.conv_up1 = AnisotropicConvolution(self.dimensions, self.channels[2] + self.channels[1], self.channels[1],
+                                               self.strides[1],
+                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
+                                               dropout=self.dropout,
+                                               is_transposed=True)
+        self.conv_up0 = AnisotropicConvolution(self.dimensions, self.channels[1] + self.channels[0], self.channels[0],
+                                               self.strides[0],
+                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
+                                               dropout=self.dropout,
+                                               is_transposed=True)
+        self.conv_out = AnisotropicConvolution(self.dimensions, self.channels[0], self.out_channels, 1,
+                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
+                                               dropout=self.dropout,
+                                               is_transposed=True, conv_only=True)
+
+    def forward(self, x):
+
+        # encoding path
+        conv_down0 = self.conv_down0(x)
+        conv_down1 = self.conv_down1(conv_down0)
+        conv_bottom = self.conv_bottom(conv_down1)
+
+        # decoding path
+        up_1 = torch.cat([conv_bottom, conv_down1], dim=1)
+        conv_up1 = self.conv_up1(up_1)
+
+        up_0 = torch.cat([conv_up1, conv_down0], dim=1)
+        conv_up0 = self.conv_up0(up_0)
+
+        out = self.conv_out(conv_up0)
+
+        return out
