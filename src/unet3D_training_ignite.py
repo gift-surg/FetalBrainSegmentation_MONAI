@@ -57,7 +57,7 @@ from monai.transforms import (
 from io_utils import create_data_list
 from custom_transform import ConverToOneHotd, MinimumPadd
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
-from custom_unet import CustomUNet25, ShallowUNet
+from custom_networks import CustomUNet25, ShallowUNet
 from logging_utils import my_iteration_print_logger
 
 

@@ -33,7 +33,7 @@ import logging
 from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
-from custom_unet import CustomUNet
+from custom_networks import CustomUNet
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth
 from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric, TverskyMetric
 from custom_transform import ConverToOneHotd
