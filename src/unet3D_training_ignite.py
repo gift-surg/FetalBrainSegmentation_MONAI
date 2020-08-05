@@ -57,7 +57,7 @@ from monai.transforms import (
 from io_utils import create_data_list
 from custom_transform import ConverToOneHotd, MinimumPadd
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
-from custom_unet import CustomUNet25
+from custom_unet import CustomUNet25, ShallowUNet
 from logging_utils import my_iteration_print_logger
 
 
@@ -236,7 +236,8 @@ def main():
     #     strides=(2, 2, 2, 2),
     #     num_res_units=2,
     # ).to(current_device)
-    net = CustomUNet25().to(current_device)
+    # net = CustomUNet25().to(current_device)
+    net = ShallowUNet().to(current_device)
     print("Model summary:")
     summary(net, input_data=[1] + patch_size)
 
@@ -288,7 +289,7 @@ def main():
         StatsHandler(output_transform=lambda x: None),
         TensorBoardStatsHandler(log_dir=os.path.join(out_model_dir, "valid"), output_transform=lambda x: None,
                                 global_epoch_transform=lambda x: trainer.state.iteration),
-        CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net}, save_key_metric=True),
+        CheckpointSaver(save_dir=out_model_dir, save_dict={"valid": net}, save_key_metric=True),
     ]
     if val_image_to_tensorboad:
         val_handlers.append(TensorBoardImageHandler(log_dir=os.path.join(out_model_dir, "valid"),

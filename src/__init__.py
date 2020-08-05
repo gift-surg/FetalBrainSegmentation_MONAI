@@ -7,3 +7,4 @@ from .custom_metrics import *
 from .custom_transform import *
 from .custom_convolution import *
 from .logging_utils import *
+from .custom_inferer import *

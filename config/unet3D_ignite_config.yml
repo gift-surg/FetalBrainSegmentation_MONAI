@@ -33,10 +33,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet"
-  output_subfix: "CustomUnet25_Dice_inplaneResize_outplaneCrop"
+  output_subfix: "ShallowUNet_Dice_inplaneResize_outplaneCrop"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Initial test with customised UNet (anisotropic strides) for heatmap prediction"
+  message: "Initial test with shallow Unet - three layers only with heavy downsampling"

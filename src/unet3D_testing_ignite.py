@@ -42,9 +42,10 @@ from monai.transforms import (
 )
 
 from io_utils import create_data_list
-from custom_transform import ConverToOneHotd
+from custom_transform import ConverToOneHotd, MinimumPadd
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
-from custom_unet import CustomUNet25
+from custom_unet import CustomUNet25, ShallowUNet
+from custom_inferer import SlidingWindowInfererWithResize
 
 
 def main():
@@ -136,7 +137,8 @@ def main():
     #     strides=(2, 2, 2, 2),
     #     num_res_units=2,
     # ).to(device)
-    net = CustomUNet25().to(current_device)
+    # net = CustomUNet25().to(current_device)
+    net = ShallowUNet().to(current_device)
 
     val_post_transforms = Compose(
         [
@@ -159,7 +161,7 @@ def main():
         device=current_device,
         val_data_loader=val_loader,
         network=net,
-        inferer=SlidingWindowInferer(roi_size=patch_size, sw_batch_size=4, overlap=0.5),
+        inferer=SlidingWindowInfererWithResize(roi_size=patch_size, sw_batch_size=1, overlap=0.5),
         prepare_batch=prepare_batch,
         post_transform=val_post_transforms,
         # key_val_metric={
@@ -168,8 +170,6 @@ def main():
         # additional_metrics={"val_acc": Accuracy(output_transform=lambda x: (x["pred"], x["label"]))},
         val_handlers=val_handlers,
     )
-
-
 
     evaluator.run()
 
