@@ -8,3 +8,4 @@ tests_deterministic_seeds/
 tests_profiling/
 **/*.pyc
 **/.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints

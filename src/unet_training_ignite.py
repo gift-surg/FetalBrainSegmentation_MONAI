@@ -15,7 +15,7 @@ from ignite.handlers import ModelCheckpoint, EarlyStopping
 from torchsummary import summary
 from torch.nn.modules.loss import BCEWithLogitsLoss, BCELoss
 
-sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
+# sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate
 from monai.transforms import Compose, LoadNiftid, AddChanneld, NormalizeIntensityd, Resized, \
@@ -314,9 +314,10 @@ def main():
         ConverToOneHotd(keys=['seg'], labels=seg_labels),
         AddChanneld(keys=['img']),
         NormalizeIntensityd(keys=['img']),
-        Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
+        Resized(keys=['img', 'seg'], spatial_size=[96, 96, -1], mode=["trilinear", "nearest"]),
         RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
-        RandRotated(keys=['img', 'seg'], degrees=90, prob=0.2, spatial_axes=[0, 1], interp_order=[1, 0], reshape=False),
+        RandRotated(keys=['img', 'seg'], range_x=90, range_y=90, prob=0.2, keep_size=True,
+                    mode=["bilinear", "nearest"]),
         RandFlipd(keys=['img', 'seg'], spatial_axis=[0, 1]),
         SqueezeDimd(keys=['img', 'seg'], dim=-1),
         ToTensord(keys=['img', 'seg'])
@@ -345,7 +346,7 @@ def main():
             ConverToOneHotd(keys=['seg'], labels=seg_labels),
             AddChanneld(keys=['img']),
             NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
+            Resized(keys=['img', 'seg'], spatial_size=[96, 96, -1], mode=["trilinear", "nearest"]),
             ToTensord(keys=['img', 'seg'])
         ])
         do_shuffle = False
@@ -357,7 +358,7 @@ def main():
             ConverToOneHotd(keys=['seg'], labels=seg_labels),
             AddChanneld(keys=['img']),
             NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img', 'seg'], spatial_size=[96, 96], interp_order=[1, 0], anti_aliasing=[True, False]),
+            Resized(keys=['img', 'seg'], spatial_size=[96, 96], mode=["trilinear", "nearest"]),
             RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
             SqueezeDimd(keys=['img', 'seg'], dim=-1),
             ToTensord(keys=['img', 'seg'])
@@ -502,9 +503,9 @@ def main():
     val_metrics = {
         # "Loss": BinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
         # "Loss": MeanDiceAndBinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
-        "Loss": 1.0 - MeanDice(add_sigmoid=True, to_onehot_y=False),
+        "Loss": 1.0 - MeanDice(sigmoid=True, to_onehot_y=False),
         # "Loss": TverskyMetric(add_sigmoid=True, to_onehot_y=False),
-        "Mean_Dice": MeanDice(add_sigmoid=True, to_onehot_y=False)
+        "Mean_Dice": MeanDice(sigmoid=True, to_onehot_y=False)
     }
 
     if sliding_window_validation:
