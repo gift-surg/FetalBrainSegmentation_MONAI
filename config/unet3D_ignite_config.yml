@@ -33,10 +33,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet"
-  output_subfix: "ShallowUNet_Dice_inplaneResize_outplaneCrop"
+  output_subfix: "CustomUNet25_inplane_Resize_outplaneCrop_larger_filters"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Initial test with shallow Unet - three layers only with heavy downsampling"
+  message: "CustomUNet25 with [16, 32, 64, 128, 256] filters and (7, 7, 3) kernel size for the first two convolutions"

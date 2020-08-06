@@ -104,7 +104,7 @@ class CustomUNet25(nn.Module):
         self.out_channels = 1
         self.channels = (16, 32, 64, 128, 256)
         self.strides = ([2, 2, 1], [2, 2, 1], [2, 2, 2], [2, 2, 2], [1, 1, 1])
-        self.kernel_size = (3, 3, 1)
+        self.kernel_size = [(7, 7, 3), (7, 7, 3), (3, 3, 3), (3, 3, 3), (3, 3, 3)]
         self.up_kernel_size = 3
         self.act = Act.PRELU
         self.norm = Norm.INSTANCE
@@ -114,39 +114,36 @@ class CustomUNet25(nn.Module):
 
         # encoding layers
         self.conv_down0 = Convolution(self.dimensions, self.in_channels, self.channels[0], self.strides[0],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[0], act=self.act, norm=self.norm,
+                                      dropout=self.dropout)
         self.conv_down1 = Convolution(self.dimensions, self.channels[0], self.channels[1], self.strides[1],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[1], act=self.act, norm=self.norm,
+                                      dropout=self.dropout)
         self.conv_down2 = Convolution(self.dimensions, self.channels[1], self.channels[2], self.strides[2],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[2], act=self.act, norm=self.norm,
+                                      dropout=self.dropout)
         self.conv_down3 = Convolution(self.dimensions, self.channels[2], self.channels[3], self.strides[3],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[3], act=self.act, norm=self.norm,
+                                      dropout=self.dropout)
         self.conv_bottom = Convolution(self.dimensions, self.channels[3], self.channels[4], self.strides[4],
-                                       kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                       kernel_size=self.kernel_size[4], act=self.act, norm=self.norm,
+                                       dropout=self.dropout)
 
         # decoding layers
         self.conv_up3 = AnisotropicConvolution(self.dimensions, self.channels[4] + self.channels[3], self.channels[3],
-                                               self.strides[3],
-                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
-                                               dropout=self.dropout,
-                                               is_transposed=True)
+                                               self.strides[3], kernel_size=self.kernel_size[4], act=self.act,
+                                               norm=self.norm, dropout=self.dropout, is_transposed=True)
         self.conv_up2 = AnisotropicConvolution(self.dimensions, self.channels[3] + self.channels[2], self.channels[2],
-                                               self.strides[2],
-                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
-                                               dropout=self.dropout,
-                                               is_transposed=True)
+                                               self.strides[2],kernel_size=self.kernel_size[3], act=self.act,
+                                               norm=self.norm, dropout=self.dropout,is_transposed=True)
         self.conv_up1 = AnisotropicConvolution(self.dimensions, self.channels[2] + self.channels[1], self.channels[1],
-                                               self.strides[1],
-                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
-                                               dropout=self.dropout,
-                                               is_transposed=True)
+                                               self.strides[1], kernel_size=self.kernel_size[2], act=self.act,
+                                               norm=self.norm, dropout=self.dropout,is_transposed=True)
         self.conv_up0 = AnisotropicConvolution(self.dimensions, self.channels[1] + self.channels[0], self.channels[0],
-                                               self.strides[0],
-                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
-                                               dropout=self.dropout,
-                                               is_transposed=True)
+                                               self.strides[0], kernel_size=self.kernel_size[1], act=self.act,
+                                               norm=self.norm, dropout=self.dropout, is_transposed=True)
         self.conv_out = AnisotropicConvolution(self.dimensions, self.channels[0], self.out_channels, 1,
-                                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
+                                               kernel_size=self.kernel_size[0], act=self.act, norm=self.norm,
                                                dropout=self.dropout,
                                                is_transposed=True, conv_only=True)
 
@@ -255,3 +252,92 @@ class ShallowUNet(nn.Module):
         out = self.conv_out(conv_up0)
 
         return out
+
+
+class FCLayer(nn.Module):
+    def __init__(self, dim_in, dim_out, act=nn.modules.PReLU):
+        super().__init__()
+
+        self.dim_in = dim_in
+        self.dim_out = dim_out
+        self.fc = nn.Linear(self.dim_in, self.dim_out)
+        self.act = act()
+
+    def forward(self, x):
+        x = self.fc(x)
+        return self.act(x)
+
+
+class NetWithFCLayer(nn.Module):
+    def __init__(self,
+                 fc_in,
+                 fc_out):
+        super().__init__()
+
+        self.dimensions = 3
+        self.in_channels = 1
+        self.out_channels = 1
+        self.channels = (8, 16)
+        self.strides = ([3, 3, 3], [3, 3, 3])
+        self.dilation = (1, 1)
+        self.kernel_size = (5, 3)
+        self.up_kernel_size = (3, 5)
+        self.act = Act.PRELU
+        self.norm = Norm.INSTANCE
+        self.dropout = 0
+        self.fc_in = fc_in
+        self.fc_out = fc_out
+
+        assert len(self.channels) == len(self.strides)
+
+        # encoding layers
+        self.conv_down0 = Convolution(self.dimensions, self.in_channels, self.channels[0], self.strides[0],
+                                      kernel_size=self.kernel_size[0], act=self.act, norm=self.norm,
+                                      dropout=self.dropout, dilation=self.dilation[0])
+        self.conv_down1 = Convolution(self.dimensions, self.channels[0], self.channels[1], self.strides[1],
+                                      kernel_size=self.kernel_size[1], act=self.act, norm=self.norm,
+                                      dropout=self.dropout, dilation=self.dilation[1])
+        # self.conv_down2 = Convolution(self.dimensions, self.channels[1], self.channels[2], self.strides[2],
+        #                               kernel_size=self.kernel_size, act=self.act, norm=self.norm,
+        #                               dropout=self.dropout, dilation=self.dilation[2])
+
+        # fully connected layer
+        self.fc_down = FCLayer(dim_in=self.fc_in, dim_out=self.fc_out)
+        self.fc_up = FCLayer(dim_in=self.fc_out, dim_out=self.fc_in)
+
+        # decoding layers
+        # self.conv_up2 = AnisotropicConvolution(self.dimensions, self.channels[2], self.channels[1],
+        #                                        self.strides[2],
+        #                                        kernel_size=self.kernel_size, act=self.act, norm=self.norm,
+        #                                        dropout=self.dropout, dilation=self.dilation[2],
+        #                                        is_transposed=True)
+
+        self.conv_up1 = AnisotropicConvolution(self.dimensions, self.channels[1], self.channels[0],
+                                               self.strides[1],
+                                               kernel_size=self.kernel_size[1], act=self.act, norm=self.norm,
+                                               dropout=self.dropout, dilation=self.dilation[1],
+                                               is_transposed=True)
+
+        self.conv_up0 = AnisotropicConvolution(self.dimensions, self.channels[0], self.out_channels,
+                                               self.strides[0],
+                                               kernel_size=self.kernel_size[0], act=self.act, norm=self.norm,
+                                               dropout=self.dropout, dilation=self.dilation[0],
+                                               is_transposed=True, conv_only=True)
+
+    def forward(self, x):
+
+        # encoding path
+        conv_down0 = self.conv_down0(x)
+        conv_down1 = self.conv_down1(conv_down0)
+
+        # fully connected layers
+        fc_1 = self.fc_down(torch.flatten(conv_down1, start_dim=1))
+        if self.fc_in != self.fc_out:
+            fc_1 = self.fc_up(fc_1)
+
+        # decoding path
+        up_1 = torch.reshape(fc_1, conv_down1.shape)
+        conv_up1 = self.conv_up1(up_1)
+        conv_up0 = self.conv_up0(conv_up1)
+
+        return conv_up0

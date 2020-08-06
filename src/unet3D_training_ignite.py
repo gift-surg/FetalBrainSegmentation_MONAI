@@ -57,7 +57,7 @@ from monai.transforms import (
 from io_utils import create_data_list
 from custom_transform import ConverToOneHotd, MinimumPadd
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
-from custom_networks import CustomUNet25, ShallowUNet
+from custom_networks import CustomUNet25, ShallowUNet, NetWithFCLayer
 from logging_utils import my_iteration_print_logger
 
 
@@ -236,8 +236,9 @@ def main():
     #     strides=(2, 2, 2, 2),
     #     num_res_units=2,
     # ).to(current_device)
-    # net = CustomUNet25().to(current_device)
-    net = ShallowUNet().to(current_device)
+    net = CustomUNet25().to(current_device)
+    # net = ShallowUNet().to(current_device)
+    # net = NetWithFCLayer(fc_in=1024, fc_out=1024).to(current_device)
     print("Model summary:")
     summary(net, input_data=[1] + patch_size)
 
