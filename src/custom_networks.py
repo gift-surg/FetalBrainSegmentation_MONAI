@@ -19,54 +19,68 @@ from custom_convolution import AnisotropicConvolution
 
 
 class CustomUNet(nn.Module):
-    def __init__(self):
+    def __init__(self,
+                 dimensions,
+                 in_channels,
+                 out_channels,
+                 channels=(16, 32, 64, 128, 256),
+                 strides=(2, 2, 2, 2, 1),
+                 kernel_size=3,
+                 up_kernel_size=3,
+                 act=Act.PRELU,
+                 norm=Norm.INSTANCE,
+                 dropout=0):
         super().__init__()
 
-        self.dimensions = 2
-        self.in_channels = 1
-        self.out_channels = 1
-        self.channels = (16, 32, 64, 128, 256)
-        self.strides = (2, 2, 2, 2, 1)
-        self.kernel_size = 3
-        self.up_kernel_size = 3
-        self.act = Act.PRELU
-        self.norm = Norm.INSTANCE
-        self.dropout = 0
+        self.dimensions = dimensions
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.channels = channels
+        self.strides = strides
+        self.kernel_size = kernel_size
+        self.up_kernel_size = up_kernel_size
+        self.act = act
+        self.norm = norm
+        self.dropout = dropout
 
+        try:
+            len(self.channels) == 5
+        except:
+            raise IOError("Network is compatible only with 5 conv layers")
         assert len(self.channels) == len(self.strides)
+        if isinstance(self.kernel_size, (list, tuple)):
+            assert len(self.channels) == len(self.kernel_size)
+        if isinstance(self.up_kernel_size, (list, tuple)):
+            assert len(self.channels) == len(self.up_kernel_size)
 
-        # encoding layers
+            # encoding layers
         self.conv_down0 = Convolution(self.dimensions, self.in_channels, self.channels[0], self.strides[0],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[0], act=self.act, norm=self.norm, dropout=self.dropout)
         self.conv_down1 = Convolution(self.dimensions, self.channels[0], self.channels[1], self.strides[1],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[1], act=self.act, norm=self.norm, dropout=self.dropout)
         self.conv_down2 = Convolution(self.dimensions, self.channels[1], self.channels[2], self.strides[2],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[2], act=self.act, norm=self.norm, dropout=self.dropout)
         self.conv_down3 = Convolution(self.dimensions, self.channels[2], self.channels[3], self.strides[3],
-                                      kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                      kernel_size=self.kernel_size[3], act=self.act, norm=self.norm, dropout=self.dropout)
         self.conv_bottom = Convolution(self.dimensions, self.channels[3], self.channels[4], self.strides[4],
-                                       kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout)
+                                       kernel_size=self.kernel_size[4], act=self.act, norm=self.norm, dropout=self.dropout)
 
         # decoding layers
         self.conv_up3 = Convolution(self.dimensions, self.channels[4] + self.channels[3], self.channels[3],
-                                    self.strides[3],
-                                    kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout,
-                                    is_transposed=True)
+                                    self.strides[3], kernel_size=self.up_kernel_size[4], act=self.act, norm=self.norm,
+                                    dropout=self.dropout, is_transposed=True)
         self.conv_up2 = Convolution(self.dimensions, self.channels[3] + self.channels[2], self.channels[2],
-                                    self.strides[2],
-                                    kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout,
-                                    is_transposed=True)
+                                    self.strides[2], kernel_size=self.up_kernel_size[3], act=self.act, norm=self.norm,
+                                    dropout=self.dropout, is_transposed=True)
         self.conv_up1 = Convolution(self.dimensions, self.channels[2] + self.channels[1], self.channels[1],
-                                    self.strides[1],
-                                    kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout,
-                                    is_transposed=True)
+                                    self.strides[1], kernel_size=self.up_kernel_size[2], act=self.act, norm=self.norm,
+                                    dropout=self.dropout, is_transposed=True)
         self.conv_up0 = Convolution(self.dimensions, self.channels[1] + self.channels[0], self.channels[0],
-                                    self.strides[0],
-                                    kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout,
-                                    is_transposed=True)
+                                    self.strides[0], kernel_size=self.up_kernel_size[1], act=self.act, norm=self.norm,
+                                    dropout=self.dropout,is_transposed=True)
         self.conv_out = Convolution(self.dimensions, self.channels[0], self.out_channels, 1,
-                                    kernel_size=self.kernel_size, act=self.act, norm=self.norm, dropout=self.dropout,
-                                    is_transposed=True, conv_only=True)
+                                    kernel_size=self.up_kernel_size[0], act=self.act, norm=self.norm,
+                                    dropout=self.dropout, is_transposed=True, conv_only=True)
 
     def forward(self, x):
 

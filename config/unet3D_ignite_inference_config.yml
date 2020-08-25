@@ -7,7 +7,7 @@ inference:
   batch_size_inference: 1
   patch_size: [96, 96, 36]
   probability_threshold: 0.5
-  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-07-29_14-43-38_ShallowUNet_Dice_inplaneResize_outplaneCrop/valid_key_metric=0.6984.pth"
+  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-08-05_17-47-42_CustomUNet25_inplane_Resize_outplaneCrop_larger_filters/prova_valid_0.878.pth"
 
 data:
   data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
@@ -26,5 +26,5 @@ data:
                   "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_F_files.txt"]
 
 output:
-  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-07-29_14-43-38_ShallowUNet_Dice_inplaneResize_outplaneCrop/inference_valid_key_metric=0.6984"
+  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-08-05_17-47-42_CustomUNet25_inplane_Resize_outplaneCrop_larger_filters/inference_prova_valid_0.878"
   out_postfix: "seg"

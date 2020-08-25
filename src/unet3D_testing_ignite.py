@@ -137,8 +137,8 @@ def main():
     #     strides=(2, 2, 2, 2),
     #     num_res_units=2,
     # ).to(device)
-    # net = CustomUNet25().to(current_device)
-    net = ShallowUNet().to(current_device)
+    net = CustomUNet25().to(current_device)
+    # net = ShallowUNet().to(current_device)
 
     val_post_transforms = Compose(
         [
