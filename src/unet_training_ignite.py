@@ -383,15 +383,23 @@ def main():
     Network preparation
     """
     # # Create UNet, DiceLoss and Adam optimizer.
-    net = monai.networks.nets.UNet(
+    # net = monai.networks.nets.UNet(
+    #     dimensions=2,
+    #     in_channels=1,
+    #     out_channels=nr_out_channels,
+    #     channels=(16, 32, 64, 128, 256),
+    #     strides=(2, 2, 2, 2),
+    #     num_res_units=2,
+    # )
+    net = CustomUNet(
         dimensions=2,
         in_channels=1,
         out_channels=nr_out_channels,
         channels=(16, 32, 64, 128, 256),
-        strides=(2, 2, 2, 2),
-        num_res_units=2,
+        strides=(2, 2, 2, 2, 1),
+        kernel_size=(7, 7, 3, 3, 3),
+        up_kernel_size=(3, 3, 3, 7, 7)
     )
-    # net = CustomUNet()
     print("Model summary:")
     summary(net, input_data=(1, 96, 96))
 
