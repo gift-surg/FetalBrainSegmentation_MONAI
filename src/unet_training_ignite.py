@@ -399,8 +399,10 @@ def main():
         do_sigmoid = True
         do_softmax = False
     elif nr_out_channels > 1:
-        do_sigmoid = False
-        do_softmax = True
+        # do_sigmoid = False
+        # do_softmax = True
+        do_sigmoid = True
+        do_softmax = False
     if loss_type == "Dice":
         loss_function = monai.losses.DiceLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
         smooth = 1e-5
