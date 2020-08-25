@@ -7,5 +7,6 @@ runs/
 tests_deterministic_seeds/
 tests_profiling/
 tests_3D_unet/
+test_postprocessing/
 **/*.pyc
 **/.ipynb_checkpoints/
