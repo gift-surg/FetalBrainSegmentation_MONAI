@@ -34,6 +34,7 @@ from monai.handlers import SegmentationSaver, CheckpointLoader, StatsHandler, Me
 from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_evaluator_with_sliding_window
+from custom_networks import CustomUNet
 
 sys.path.append("/mnt/data/mranzini/Code/Demic-v0.1")
 from Demic.util.image_process import *
@@ -118,13 +119,22 @@ def main():
     """
     device = torch.cuda.current_device()
     # Create UNet, DiceLoss and Adam optimizer.
-    net = monai.networks.nets.UNet(
+    # net = monai.networks.nets.UNet(
+    #     dimensions=2,
+    #     in_channels=1,
+    #     out_channels=nr_out_channels,
+    #     channels=(16, 32, 64, 128, 256),
+    #     strides=(2, 2, 2, 2),
+    #     num_res_units=2,
+    # ).to(device)
+    net = CustomUNet(
         dimensions=2,
         in_channels=1,
         out_channels=nr_out_channels,
         channels=(16, 32, 64, 128, 256),
-        strides=(2, 2, 2, 2),
-        num_res_units=2,
+        strides=(2, 2, 2, 2, 1),
+        kernel_size=(7, 7, 3, 3, 3),
+        up_kernel_size=(3, 3, 3, 7, 7)
     ).to(device)
 
     # define sliding window size and batch size for windows inference
