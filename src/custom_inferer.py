@@ -33,6 +33,7 @@ class SlidingWindowInfererWithResize(Inferer):
             if the components of the `roi_size` are non-positive values, the transform will use the
             corresponding components of img size. For example, `roi_size=(32, -1)` will be adapted
             to `(32, 64)` if the second spatial dimension size of img is `64`.
+        resize_3d (bool): defines whether to perform resizing in 3D or only in the in-plane direction
         sw_batch_size: the batch size to run window slices.
         overlap: Amount of overlap between scans.
         mode: {``"constant"``, ``"gaussian"``}
@@ -48,10 +49,12 @@ class SlidingWindowInfererWithResize(Inferer):
     """
 
     def __init__(
-        self, roi_size, sw_batch_size: int = 1, overlap: float = 0.25, mode: Union[BlendMode, str] = BlendMode.CONSTANT
+        self, roi_size, resize_3d: bool = False, sw_batch_size: int = 1,
+            overlap: float = 0.25, mode: Union[BlendMode, str] = BlendMode.CONSTANT
     ):
         Inferer.__init__(self)
         self.roi_size = roi_size
+        self.resize_3d = resize_3d
         self.sw_batch_size = sw_batch_size
         self.overlap = overlap
         self.mode: BlendMode = BlendMode(mode)
@@ -70,6 +73,8 @@ class SlidingWindowInfererWithResize(Inferer):
         resized_size = copy.deepcopy(orig_size)
         resized_size[2] = self.roi_size[0]
         resized_size[3] = self.roi_size[1]
+        if self.resize_3d:
+            resized_size[4] = self.roi_size[2]
         inputs_resize = torch.nn.functional.interpolate(inputs, size=resized_size[2:], mode='trilinear')
         print(inputs_resize.shape)
         outputs = sliding_window_inference(inputs_resize, self.roi_size, self.sw_batch_size, network,
