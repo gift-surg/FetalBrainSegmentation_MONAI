@@ -69,6 +69,7 @@ def main():
     nr_out_channels = config_info['inference']['nr_out_channels']
     batch_size_inference = config_info['inference']['batch_size_inference']
     patch_size = config_info["inference"]["patch_size"]
+    resize_3d = config_info["inference"]["resize_3d"]
     # temporary check as sliding window inference does not accept higher batch size
     assert batch_size_inference == 1
     prob_thr = config_info['inference']['probability_threshold']
@@ -161,7 +162,7 @@ def main():
         device=current_device,
         val_data_loader=val_loader,
         network=net,
-        inferer=SlidingWindowInfererWithResize(roi_size=patch_size, sw_batch_size=1, overlap=0.5),
+        inferer=SlidingWindowInfererWithResize(roi_size=patch_size, resize_3d=resize_3d, sw_batch_size=1, overlap=0.5),
         prepare_batch=prepare_batch,
         post_transform=val_post_transforms,
         # key_val_metric={

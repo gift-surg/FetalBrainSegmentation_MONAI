@@ -58,7 +58,6 @@ from io_utils import create_data_list
 from custom_transform import ConverToOneHotd, MinimumPadd
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
 from custom_networks import CustomUNet25, ShallowUNet, NetWithFCLayer
-from logging_utils import my_iteration_print_logger
 
 
 def main():
@@ -178,10 +177,11 @@ def main():
             AddChanneld(keys=["img"]),
             NormalizeIntensityd(keys=["img"]),
             MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
-            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
-            RandCropByPosNegLabeld(
-                keys=["img", "seg"], label_key="seg", spatial_size=patch_size, pos=1, neg=1, num_samples=2
-            ),
+            # Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
+            # RandCropByPosNegLabeld(
+            #     keys=["img", "seg"], label_key="seg", spatial_size=patch_size, pos=1, neg=1, num_samples=2
+            # ),
+            Resized(keys=["img", "seg"], spatial_size=patch_size),
             RandRotated(keys=["img", "seg"], range_x=90, range_y=90, prob=0.5, keep_size=True,
                         mode=["bilinear", "nearest"]),
             RandFlipd(keys=["img", "seg"], spatial_axis=[0, 1]),
@@ -208,7 +208,8 @@ def main():
             AddChanneld(keys=['img']),
             NormalizeIntensityd(keys=['img']),
             MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
-            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
+            # Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
+            Resized(keys=["img", "seg"], spatial_size=patch_size),
             ToTensord(keys=['img', 'seg'])
         ]
     )

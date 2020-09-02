@@ -5,7 +5,7 @@ device:
 training:
   seg_labels: [1]
   loss_type: "Dice"
-  batch_size_train: 4
+  batch_size_train: 8
   batch_size_valid: 1
   inplane_size: [96, 96]
   outplane_size: 36
@@ -33,10 +33,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet"
-  output_subfix: "CustomUNet25_inplane_Resize_outplaneCrop_larger_filters"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D"
+  output_subfix: "CustomUNet25_inputFull3DFOV_larger_filters"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D_fullFOV"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "CustomUNet25 with [16, 32, 64, 128, 256] filters and (7, 7, 3) kernel size for the first two convolutions"
+  message: "Input the full 3D image resized to  [96, 96, 36]. CustomUNet25 with [16, 32, 64, 128, 256] filters and (7, 7, 3) kernel size for the first two convolutions"

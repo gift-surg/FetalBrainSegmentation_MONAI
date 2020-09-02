@@ -50,8 +50,10 @@ class CustomUNet(nn.Module):
         assert len(self.channels) == len(self.strides)
         if isinstance(self.kernel_size, (list, tuple)):
             assert len(self.channels) == len(self.kernel_size)
+        #TODO: if int, remap to len of channels!
         if isinstance(self.up_kernel_size, (list, tuple)):
             assert len(self.channels) == len(self.up_kernel_size)
+        # TODO: if int, remap to len of channels!
 
             # encoding layers
         self.conv_down0 = Convolution(self.dimensions, self.in_channels, self.channels[0], self.strides[0],
