@@ -1,0 +1,25 @@
+device:
+  cuda_device: 1
+  num_workers: 1
+
+inference:
+  nr_out_channels: 1
+  batch_size_inference: 1
+  patch_size: [96, 96, 36]
+  resize_3d: False
+  probability_threshold: 0.5
+  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-08-05_17-47-42_CustomUNet25_inplane_Resize_outplaneCrop_larger_filters/valid_key_metric=0.8792.pth"
+
+data:
+  data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB1",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupB2",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupC",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupD",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupE",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupF"]
+  inference_list: "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_train_files.txt"
+
+output:
+  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-08-05_17-47-42_CustomUNet25_inplane_Resize_outplaneCrop_larger_filters/inf_on_training_valid_key_metric=0.8792"
+  out_postfix: "seg"
