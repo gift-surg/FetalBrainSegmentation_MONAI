@@ -11,6 +11,7 @@
 
 import warnings
 import sys
+import numpy as np
 
 import torch
 import torch.nn.functional as F
@@ -95,6 +96,91 @@ class DiceAndBinaryXentLoss(_Loss):
         dice_loss = self.dice_loss_fn(input, target, smooth)
         xent_loss = self.xent_fn(input, target)
         return self.weight_dice * dice_loss + self.weight_xent * xent_loss
+
+
+class MultiScaleDice(_Loss):
+    """
+    Compute a loss function that evaluates Dice loss on S scales and returns the average Dice across scales:
+    Based on Ebner E., Wang, G., "An automated framework for localization, segmentation and super-resolution
+    reconstruction of fetal brain MRI",  NeuroImage (2020)
+
+    """
+    def __init__(
+            self,
+            dimensions=2,
+            number_of_scales=4,
+            do_sigmoid=False,
+            include_background=True,
+            to_onehot_y=False,
+            do_softmax=False,
+            squared_pred=False,
+            jaccard=False,
+            reduction="mean"
+    ):
+        """
+        Args:
+            dimensions (int):
+            number_of_scales (int): number of scales to compute the Dice loss over
+            do_sigmoid (bool): [DICE and XENT] If True, apply a sigmoid function to the prediction.
+            include_background (bool): [DICE] If False channel index 0 (background category)
+                is excluded from the calculation.
+            to_onehot_y (bool): [DICE] whether to convert `y` into the one-hot format. Defaults to False.
+            do_softmax (bool): [DICE] If True, apply a softmax function to the prediction.
+            squared_pred (bool): [DICE] use squared versions of targets and predictions in the denominator or not.
+            jaccard (bool): [DICE] compute Jaccard Index (soft IoU) instead of dice or not.
+            reduction (`none|mean|sum`): Specifies the reduction to apply to the output:
+                ``'none'``: no reduction will be applied,
+                ``'mean'``: the sum of the output will be divided by the number of elements in the output,
+                ``'sum'``: the output will be summed.
+                Default: ``'mean'``.
+        """
+        super().__init__(reduction=reduction)
+        self.dimensions = dimensions
+        self.number_of_scales = number_of_scales
+        self.do_sigmoid = do_sigmoid
+        self.include_background = include_background
+        self.to_onehot_y = to_onehot_y
+        self.do_softmax = do_softmax
+        self.squared_pred = squared_pred
+        self.jaccard = jaccard
+
+        if self.dimensions == 2:
+            self.avg_pool_fn = torch.nn.AvgPool2d(kernel_size=2, stride=2)
+        elif self.dimensions == 3:
+            self.avg_pool_fn = torch.nn.AvgPool3d(kernel_size=2, stride=2)
+            # NOTE: I am downsampling along all directions! makes sense or should I keep z fixed?
+        else:
+            raise IOError("The number of the input dimensions is not currently supported")
+
+        self.dice_loss_fn = DiceLoss_noSmooth(do_sigmoid=self.do_sigmoid,
+                                              do_softmax=self.do_softmax,
+                                              squared_pred=self.squared_pred,
+                                              jaccard=self.jaccard,
+                                              reduction=reduction)
+
+    def forward(self, input, target, smooth=1e-5):
+        """
+        Args:
+            input (tensor): the shape should be BNH[WD].
+            target (tensor): the shape should be BNH[WD].
+            smooth (float): a small constant to avoid nan in Dice Computation.
+        """
+        #TODO assert input and target are either 2D or 3D
+        dice_loss = self.dice_loss_fn(input, target, smooth)
+        print(dice_loss)
+
+        final_size = np.asarray(list(input.shape))[2:] / (2 ** self.number_of_scales)
+        assert (
+                np.all(final_size >= 1)
+        ), f"selected number or scales is too big compared to the input size)"
+
+        for s in range(self.number_of_scales-1):
+            input = self.avg_pool_fn(input)
+            target = self.avg_pool_fn(target)
+            print(self.dice_loss_fn(input, target, smooth))
+            dice_loss += self.dice_loss_fn(input, target, smooth)
+
+        return dice_loss / self.number_of_scales
 
 
 # exactly the same as Monai's Dice, but smooth factor is removed from the numerator
