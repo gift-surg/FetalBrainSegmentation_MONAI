@@ -56,7 +56,7 @@ from monai.transforms import (
 
 from io_utils import create_data_list
 from custom_transform import ConverToOneHotd, MinimumPadd
-from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
+from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, MultiScaleDice
 from custom_networks import CustomUNet25, ShallowUNet, NetWithFCLayer
 
 
@@ -275,6 +275,10 @@ def main():
     elif loss_type == "Dice_Xent":
         loss_function = DiceAndBinaryXentLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
         print(f"[LOSS] Using Custom loss, Dice + Xent with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
+    elif loss_type == "MultiScaleDice":
+        loss_function = MultiScaleDice(dimensions=3, number_of_scales=4, do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        print(f"[LOSS] Using Custom loss, Multi-scale Dice Loss with 4 scales, do_sigmoid={do_sigmoid}, "
+              f"do_softmax={do_softmax}")
     else:
         raise IOError("Unrecognized loss type")
 

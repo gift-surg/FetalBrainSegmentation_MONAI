@@ -167,7 +167,6 @@ class MultiScaleDice(_Loss):
         """
         #TODO assert input and target are either 2D or 3D
         dice_loss = self.dice_loss_fn(input, target, smooth)
-        print(dice_loss)
 
         final_size = np.asarray(list(input.shape))[2:] / (2 ** self.number_of_scales)
         assert (
@@ -177,7 +176,6 @@ class MultiScaleDice(_Loss):
         for s in range(self.number_of_scales-1):
             input = self.avg_pool_fn(input)
             target = self.avg_pool_fn(target)
-            print(self.dice_loss_fn(input, target, smooth))
             dice_loss += self.dice_loss_fn(input, target, smooth)
 
         return dice_loss / self.number_of_scales
