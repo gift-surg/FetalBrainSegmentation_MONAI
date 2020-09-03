@@ -180,12 +180,12 @@ def main():
             NormalizeIntensityd(keys=["img"]),
             MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
             # in-plane resize + crop along z
-            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
+            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1], mode=["trilinear", "nearest"]),
             RandCropByPosNegLabeld(
                 keys=["img", "seg"], label_key="seg", spatial_size=patch_size, pos=1, neg=1, num_samples=2
             ),
             # full 3D resize
-            # Resized(keys=["img", "seg"], spatial_size=patch_size),
+            # Resized(keys=["img", "seg"], spatial_size=patch_size, mode=["trilinear", "nearest"]),
             RandRotated(keys=["img", "seg"], range_x=90, range_y=90, prob=0.5, keep_size=True,
                         mode=["bilinear", "nearest"]),
             RandFlipd(keys=["img", "seg"], spatial_axis=[0, 1]),
@@ -213,9 +213,9 @@ def main():
             NormalizeIntensityd(keys=['img']),
             MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
             # in-plane resize but sliding window along z
-            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
+            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1], mode=["trilinear", "nearest"]),
             # full 3D resize
-            # Resized(keys=["img", "seg"], spatial_size=patch_size),
+            # Resized(keys=["img", "seg"], spatial_size=patch_size, mode=["trilinear", "nearest"]),
             ToTensord(keys=['img', 'seg'])
         ]
     )
