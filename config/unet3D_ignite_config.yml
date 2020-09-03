@@ -17,6 +17,7 @@ training:
   gradient_clipping: null
   lr: 1e-4
   lr_decay: null
+  weight_decay: null
   manual_seed: 0
 
 data:
@@ -33,10 +34,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet"
-  output_subfix: "CustomUNet25_inputFull3DFOV_larger_filters"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D_fullFOV"
+  output_subfix: "CustomUNet25_inplaneResize_outplaneCrop_lessFilters_dropout0.5"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Input the full 3D image resized to  [96, 96, 36]. CustomUNet25 with [16, 32, 64, 128, 256] filters and (7, 7, 3) kernel size for the first two convolutions"
+  message: "Back to resizing to [96, 96] in plane and then crop patches of [96, 96, 36]. CustomUNet25 with [8, 16, 32, 65, 128] filters and (7, 7, 3) kernel size for the first two convolutions"

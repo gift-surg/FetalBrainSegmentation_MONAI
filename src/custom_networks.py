@@ -50,10 +50,12 @@ class CustomUNet(nn.Module):
         assert len(self.channels) == len(self.strides)
         if isinstance(self.kernel_size, (list, tuple)):
             assert len(self.channels) == len(self.kernel_size)
-        #TODO: if int, remap to len of channels!
+        elif isinstance(self.kernel_size, int):
+            self.kernel_size = [self.kernel_size] * len(self.channels)
         if isinstance(self.up_kernel_size, (list, tuple)):
             assert len(self.channels) == len(self.up_kernel_size)
-        # TODO: if int, remap to len of channels!
+        elif isinstance(self.up_kernel_size, int):
+            self.up_kernel_size = [self.up_kernel_size] * len(self.channels)
 
             # encoding layers
         self.conv_down0 = Convolution(self.dimensions, self.in_channels, self.channels[0], self.strides[0],
@@ -112,19 +114,30 @@ class CustomUNet(nn.Module):
 
 
 class CustomUNet25(nn.Module):
-    def __init__(self):
+    def __init__(self,
+                 dimensions,
+                 in_channels,
+                 out_channels,
+                 channels=(16, 32, 64, 128, 256),
+                 strides=([2, 2, 1], [2, 2, 1], [2, 2, 2], [2, 2, 2], [1, 1, 1]),
+                 kernel_size=((7, 7, 3), (7, 7, 3), (3, 3, 3), (3, 3, 3), (3, 3, 3)),
+                 up_kernel_size=((3, 3, 3), (3, 3, 3), (3, 3, 3), (7, 7, 3), (7, 7, 3)),
+                 act=Act.PRELU,
+                 norm=Norm.INSTANCE,
+                 dropout=0
+        ):
         super().__init__()
 
-        self.dimensions = 3
-        self.in_channels = 1
-        self.out_channels = 1
-        self.channels = (16, 32, 64, 128, 256)
-        self.strides = ([2, 2, 1], [2, 2, 1], [2, 2, 2], [2, 2, 2], [1, 1, 1])
-        self.kernel_size = [(7, 7, 3), (7, 7, 3), (3, 3, 3), (3, 3, 3), (3, 3, 3)]
-        self.up_kernel_size = 3
-        self.act = Act.PRELU
-        self.norm = Norm.INSTANCE
-        self.dropout = 0
+        self.dimensions = dimensions
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.channels = channels
+        self.strides = strides
+        self.kernel_size = kernel_size
+        self.up_kernel_size = up_kernel_size
+        self.act = act
+        self.norm = norm
+        self.dropout = dropout
 
         assert len(self.channels) == len(self.strides)
 
@@ -147,19 +160,19 @@ class CustomUNet25(nn.Module):
 
         # decoding layers
         self.conv_up3 = AnisotropicConvolution(self.dimensions, self.channels[4] + self.channels[3], self.channels[3],
-                                               self.strides[3], kernel_size=self.kernel_size[4], act=self.act,
+                                               self.strides[3], kernel_size=self.up_kernel_size[0], act=self.act,
                                                norm=self.norm, dropout=self.dropout, is_transposed=True)
         self.conv_up2 = AnisotropicConvolution(self.dimensions, self.channels[3] + self.channels[2], self.channels[2],
-                                               self.strides[2],kernel_size=self.kernel_size[3], act=self.act,
+                                               self.strides[2],kernel_size=self.up_kernel_size[1], act=self.act,
                                                norm=self.norm, dropout=self.dropout,is_transposed=True)
         self.conv_up1 = AnisotropicConvolution(self.dimensions, self.channels[2] + self.channels[1], self.channels[1],
-                                               self.strides[1], kernel_size=self.kernel_size[2], act=self.act,
+                                               self.strides[1], kernel_size=self.up_kernel_size[2], act=self.act,
                                                norm=self.norm, dropout=self.dropout,is_transposed=True)
         self.conv_up0 = AnisotropicConvolution(self.dimensions, self.channels[1] + self.channels[0], self.channels[0],
-                                               self.strides[0], kernel_size=self.kernel_size[1], act=self.act,
+                                               self.strides[0], kernel_size=self.up_kernel_size[3], act=self.act,
                                                norm=self.norm, dropout=self.dropout, is_transposed=True)
         self.conv_out = AnisotropicConvolution(self.dimensions, self.channels[0], self.out_channels, 1,
-                                               kernel_size=self.kernel_size[0], act=self.act, norm=self.norm,
+                                               kernel_size=self.up_kernel_size[4], act=self.act, norm=self.norm,
                                                dropout=self.dropout,
                                                is_transposed=True, conv_only=True)
 

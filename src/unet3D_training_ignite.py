@@ -99,6 +99,8 @@ def main():
     lr_decay = config_info['training']['lr_decay']
     if lr_decay is not None:
         lr_decay = float(lr_decay)
+    weight_decay = config_info['training']['weight_decay']
+    weight_decay = 0 if weight_decay is None else float(weight_decay)
     nr_train_epochs = config_info['training']['nr_train_epochs']
     validation_every_n_epochs = config_info['training']['validation_every_n_epochs']
     sliding_window_validation = config_info['training']['sliding_window_validation']
@@ -177,11 +179,13 @@ def main():
             AddChanneld(keys=["img"]),
             NormalizeIntensityd(keys=["img"]),
             MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
-            # Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
-            # RandCropByPosNegLabeld(
-            #     keys=["img", "seg"], label_key="seg", spatial_size=patch_size, pos=1, neg=1, num_samples=2
-            # ),
-            Resized(keys=["img", "seg"], spatial_size=patch_size),
+            # in-plane resize + crop along z
+            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
+            RandCropByPosNegLabeld(
+                keys=["img", "seg"], label_key="seg", spatial_size=patch_size, pos=1, neg=1, num_samples=2
+            ),
+            # full 3D resize
+            # Resized(keys=["img", "seg"], spatial_size=patch_size),
             RandRotated(keys=["img", "seg"], range_x=90, range_y=90, prob=0.5, keep_size=True,
                         mode=["bilinear", "nearest"]),
             RandFlipd(keys=["img", "seg"], spatial_axis=[0, 1]),
@@ -208,8 +212,10 @@ def main():
             AddChanneld(keys=['img']),
             NormalizeIntensityd(keys=['img']),
             MinimumPadd(keys=["img", "seg"], k=(-1, -1, outplane_size)),
-            # Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
-            Resized(keys=["img", "seg"], spatial_size=patch_size),
+            # in-plane resize but sliding window along z
+            Resized(keys=["img", "seg"], spatial_size=inplane_size + [-1]),
+            # full 3D resize
+            # Resized(keys=["img", "seg"], spatial_size=patch_size),
             ToTensord(keys=['img', 'seg'])
         ]
     )
@@ -237,7 +243,13 @@ def main():
     #     strides=(2, 2, 2, 2),
     #     num_res_units=2,
     # ).to(current_device)
-    net = CustomUNet25().to(current_device)
+    net = CustomUNet25(
+        dimensions=3,
+        in_channels=1,
+        out_channels=1,
+        channels=(8, 16, 32, 64, 128),
+        dropout=0.5
+    ).to(current_device)
     # net = ShallowUNet().to(current_device)
     # net = NetWithFCLayer(fc_in=1024, fc_out=1024).to(current_device)
     print("Model summary:")
@@ -266,7 +278,7 @@ def main():
     else:
         raise IOError("Unrecognized loss type")
 
-    opt = torch.optim.Adam(net.parameters(), lr=lr)
+    opt = torch.optim.Adam(net.parameters(), lr=lr, weight_decay=weight_decay)
     lr_scheduler = None
     if lr_decay is not None:
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=opt, gamma=lr_decay, last_epoch=-1)
