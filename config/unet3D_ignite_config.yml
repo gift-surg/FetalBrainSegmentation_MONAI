@@ -1,11 +1,11 @@
 device:
-  cuda_device: 2
+  cuda_device: 1
   num_workers: 4
 
 training:
   seg_labels: [1]
   loss_type: "MultiScaleDice"
-  batch_size_train: 8
+  batch_size_train: 16
   batch_size_valid: 1
   inplane_size: [96, 96]
   outplane_size: 36
@@ -34,10 +34,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet"
-  output_subfix: "CustomUNet25_MultiScaleDice_lessFilters_dropout0.5"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D"
+  output_subfix: "CustomUNet25_MultiScaleDice_BoundingBoxCropping"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/persistent_cache_3D_crop"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Testing the Multi-scale Dice Loss. Inputs are resized in-plane and cropped out-of-plane. CustomUNet25 with [8, 16, 32, 65, 128] filters and (7, 7, 3) kernel size for the first two convolutions, dropout0.5"
+  message: "Testing the Multi-scale Dice Loss and cropping with bounding box from GT segmentation as in Seg-Net of NeuroImage paper. CustomUNet25 with [8, 16, 32, 65, 128] filters and (7, 7, 3) kernel size for the first two convolutions, dropout0.5"
