@@ -23,7 +23,7 @@ from scipy import ndimage
 import torch
 from torch.utils.data import DataLoader
 
-sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
+# sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate, sliding_window_inference, create_test_image_3d, NiftiSaver
 from monai.metrics import compute_meandice

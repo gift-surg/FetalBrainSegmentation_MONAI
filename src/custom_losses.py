@@ -16,7 +16,7 @@ import torch
 import torch.nn.functional as F
 from torch.nn.modules.loss import _Loss, BCEWithLogitsLoss, BCELoss
 
-sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
+# sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.networks.utils import one_hot
 

@@ -22,7 +22,7 @@ import torch
 from ignite.engine import Engine
 from torch.utils.data import DataLoader
 
-sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
+# sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate
 from monai.transforms import Compose, LoadNiftid, AddChanneld, NormalizeIntensityd, Resized, \

@@ -15,7 +15,7 @@ import numpy as np
 
 import torch
 
-sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
+# sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.transforms.compose import MapTransform
 
