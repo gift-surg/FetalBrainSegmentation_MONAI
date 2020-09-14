@@ -42,11 +42,11 @@ from monai.transforms import (
 )
 
 from io_utils import create_data_list
-from custom_transform import ConverToOneHotd, MinimumPadd
+from custom_transform import ConverToOneHotd, MinimumPadd, CropForegroundAnisotropicMargind, PadToOriginalSized
 from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth
 from custom_networks import CustomUNet25, ShallowUNet
 from custom_inferer import SlidingWindowInfererWithResize
-
+from custom_ignite_engines import SupervisedEvaluatorCropping
 
 def main():
     """
@@ -98,6 +98,7 @@ def main():
     val_files = create_data_list(data_folder_list=data_root,
                                  subject_list=inference_list,
                                  img_postfix='_Image',
+                                 mask_postfix='_Label',
                                  is_inference=True)
 
     print(len(val_files))
@@ -109,10 +110,11 @@ def main():
     # - apply whitening
     # - NOTE: resizing needs to be applied afterwards, otherwise it cannot be remapped back to original size
     val_transforms = Compose([
-        LoadNiftid(keys=['img']),
-        AddChanneld(keys=['img']),
+        LoadNiftid(keys=['img', 'mask']),
+        AddChanneld(keys=['img', 'mask']),
         NormalizeIntensityd(keys=['img']),
-        ToTensord(keys=['img'])
+        CropForegroundAnisotropicMargind(keys=['img'], source_key='mask', margin=[20, 20, 5]),
+        ToTensord(keys=['img', 'mask'])
     ])
     # create a validation data loader
     val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
@@ -123,8 +125,8 @@ def main():
     def prepare_batch(batchdata):
         assert isinstance(batchdata, dict), "prepare_batch expects dictionary input data."
         return (
-            (batchdata['img'], batchdata['seg'])
-            if 'seg' in batchdata
+            (batchdata['img'], batchdata['mask'])
+            if 'mask' in batchdata
             else (batchdata['img'], None)
         )
 
@@ -149,6 +151,7 @@ def main():
     val_post_transforms = Compose(
         [
             Activationsd(keys="pred", sigmoid=True),
+            PadToOriginalSized(keys="pred", source_key="mask", margin=[20, 20, 5])
             # AsDiscreted(keys="pred", threshold_values=True),
             # KeepLargestConnectedComponentd(keys="pred", applied_labels=[1]),
         ]
@@ -163,7 +166,7 @@ def main():
         ),
     ]
 
-    evaluator = SupervisedEvaluator(
+    evaluator = SupervisedEvaluatorCropping(
         device=current_device,
         val_data_loader=val_loader,
         network=net,

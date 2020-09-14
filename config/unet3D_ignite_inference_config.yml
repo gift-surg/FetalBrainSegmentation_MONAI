@@ -8,7 +8,7 @@ inference:
   patch_size: [96, 96, 36]
   resize_3d: False
   probability_threshold: 0.5
-  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-08-05_17-47-42_CustomUNet25_inplane_Resize_outplaneCrop_larger_filters/valid_key_metric=0.8792.pth"
+  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-09-03_19-31-47_CustomUNet25_MultiScaleDice_BoundingBoxCropping/valid_key_metric=0.894.pth"
 
 data:
   data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
@@ -17,7 +17,14 @@ data:
               "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupC",
               "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupD",
               "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupE",
-              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupF"]
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset_extension/GroupF",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/inference/expanded/GroupA",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/inference/expanded/GroupB1",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/inference/expanded/GroupB2",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/inference/expanded/GroupC",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/inference/expanded/GroupD",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/inference/expanded/GroupE",
+              "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/inference/expanded/GroupF"]
   inference_list: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_h_files.txt",
                   "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_p1_files.txt",
                   "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_p2_files.txt",
@@ -27,5 +34,5 @@ data:
                   "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_inference_F_files.txt"]
 
 output:
-  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-08-05_17-47-42_CustomUNet25_inplane_Resize_outplaneCrop_larger_filters/inference_valid_key_metric=0.8792"
+  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_3D_unet/2020-09-03_19-31-47_CustomUNet25_MultiScaleDice_BoundingBoxCropping/inference_valid_key_metric=0.894_guotaidetect"
   out_postfix: "seg"

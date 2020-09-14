@@ -10,13 +10,14 @@
 # limitations under the License.
 
 import numpy as np
+import torch
 from typing import Any, Callable, Dict, Hashable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from monai.transforms.compose import MapTransform
 
 from monai.config import IndexSelection, KeysCollection
 from monai.utils import NumpyPadMode, ensure_tuple, ensure_tuple_rep, fall_back_tuple
-from monai.transforms import DivisiblePad, SpatialCrop
+from monai.transforms import DivisiblePad, SpatialCrop, BorderPad
 NumpyPadModeSequence = Union[Sequence[Union[NumpyPadMode, str]], NumpyPadMode, str]
 
 
@@ -162,4 +163,68 @@ class CropForegroundAnisotropicMargind(MapTransform):
         cropper = SpatialCrop(roi_start=box_start, roi_end=box_end)
         for key in self.keys:
             d[key] = cropper(d[key])
+        return d
+
+
+class PadToOriginalSized(MapTransform):
+    """
+    Ciao
+    """
+
+    def __init__(self,
+                 keys: KeysCollection,
+                 source_key: str,
+                 select_fn: Callable = lambda x: x > 0,
+                 channel_indices: Optional[IndexSelection] = None,
+                 margin: Optional[Sequence[int]] = 0,
+                 mode: NumpyPadModeSequence = NumpyPadMode.CONSTANT,
+                 ):
+        """
+
+        :param keys:
+        :param source_key:
+        :param select_fn:
+        :param channel_indices:
+        :param margin:
+        :param mode:
+        """
+        super().__init__(keys)
+        self.source_key = source_key
+        self.select_fn = select_fn
+        self.channel_indices = channel_indices
+        self.margin = margin
+        self.mode = ensure_tuple_rep(mode, len(self.keys))
+
+    def __call__(self, data):
+        d = dict(data)
+        channel_dim = 1
+        assert d[self.source_key].shape[0] == 1, "Batch size > 1 currently not supported"
+        assert d[self.source_key].shape[channel_dim] == 1, "Multi-channel currently not supported"
+        crop_torch = d[self.source_key]
+        crop_source = crop_torch.detach().cpu().numpy()
+
+        box_start, box_end = generate_spatial_bounding_box_anisotropic_margin(
+            crop_source[0], self.select_fn, self.channel_indices, self.margin
+        )
+
+        original_size = np.asarray(np.squeeze(crop_source[0]).shape)
+        spatial_border = np.zeros(len(original_size)*2, dtype=int)
+        spatial_border[::2] = np.asarray(box_start)
+        spatial_border[1::2] = np.asarray(original_size) - np.asarray(box_end)
+        spatial_border = spatial_border.tolist()
+
+        padder = BorderPad(spatial_border=spatial_border)
+
+        for key in self.keys:
+            assert d[key].shape[channel_dim] == 1, "Multi-channel currently not supported"
+            # to_pad_torch = torch.squeeze(d[key], dim=channel_dim)
+            to_pad_torch = d[key]
+            to_pad_img = to_pad_torch.detach().cpu().numpy()
+            # loop over batch elements
+            padded = np.zeros(crop_source.shape, dtype=to_pad_img.dtype)
+            for i, item in enumerate(to_pad_img):
+                padded[i] = padder(item)
+
+            padded_torch = torch.as_tensor(padded, device=d[key].device)
+            d[key] = padded_torch
         return d

@@ -11,3 +11,4 @@ test_postprocessing/
 **/*.pyc
 **/.ipynb_checkpoints/
 notebooks/.ipynb_checkpoints
+notebooks/.ipynb_checkpoints/*.ipynb

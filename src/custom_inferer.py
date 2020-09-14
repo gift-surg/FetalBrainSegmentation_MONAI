@@ -10,16 +10,16 @@
 # limitations under the License.
 
 import copy
-from typing import Callable, Union
+from typing import Any, Callable, Dict, Hashable, List, Mapping, Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 
+from monai.config import IndexSelection, KeysCollection
 from monai.inferers import Inferer
 from monai.inferers.utils import sliding_window_inference
+from monai.transforms import SpatialCrop
 from monai.utils import BlendMode
-from monai.data.utils import compute_importance_map, dense_patch_slices, get_valid_patch_size
-from monai.utils import BlendMode, PytorchPadMode, fall_back_tuple
 
 
 class SlidingWindowInfererWithResize(Inferer):
