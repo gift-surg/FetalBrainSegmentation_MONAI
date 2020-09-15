@@ -70,7 +70,7 @@ class SupervisedTrainerClipping(Trainer):
         additional_metrics=None,
         train_handlers=None,
         grad_clipping=None
-    ):
+    ) -> None:
         # set up Ignite engine and environments
         super().__init__(
             device=device,

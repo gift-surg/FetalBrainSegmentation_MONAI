@@ -51,7 +51,7 @@ from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
 from custom_unet import CustomUNet
-from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth
+from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth, DiceLossExtended
 from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric, TverskyMetric
 from custom_transform import ConverToOneHotd
 from custom_inferer import SlidingWindowInferer2D
@@ -256,9 +256,9 @@ def main():
                                          batch_size=batch_size_train,
                                          shuffle=True, num_workers=num_workers,
                                          pin_memory=torch.cuda.is_available())
-    check_train_data = monai.utils.misc.first(train_loader)
-    print("Training data tensor shapes")
-    print(check_train_data['img'].shape, check_train_data['seg'].shape)
+    # check_train_data = monai.utils.misc.first(train_loader)
+    # print("Training data tensor shapes")
+    # print(check_train_data['img'].shape, check_train_data['seg'].shape)
 
     # data preprocessing for validation:
     # - convert data to right format [batch, channel, dim, dim, dim]
@@ -297,9 +297,9 @@ def main():
                                        batch_size=batch_size_valid,
                                        shuffle=do_shuffle,
                                        num_workers=num_workers)
-    check_valid_data = monai.utils.misc.first(val_loader)
-    print("Validation data tensor shapes")
-    print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
+    # check_valid_data = monai.utils.misc.first(val_loader)
+    # print("Validation data tensor shapes")
+    # print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
 
     """
     Network preparation
@@ -319,6 +319,7 @@ def main():
     summary(net, input_data=(1, 96, 96))
 
     smooth = None
+    squared_pred = True
     if nr_out_channels == 1:
         do_sigmoid = True
         do_softmax = False
@@ -326,16 +327,31 @@ def main():
         do_sigmoid = False
         do_softmax = True
     if loss_type == "Dice":
-        loss_function = monai.losses.DiceLoss(sigmoid=do_sigmoid, softmax=do_softmax)
-        smooth = 1e-5
-        print(f"[LOSS] Using monai.losses.DiceLoss with smooth = {smooth}, do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
+        smooth_num = 1e-5
+        smooth_den = smooth_num
+        # loss_function = monai.losses.DiceLoss(sigmoid=do_sigmoid, softmax=do_softmax)
+        loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
+                                         smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred)
+        print(f"[LOSS] Using DiceLossExtended with smooth = {smooth_num}, "
+              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
     elif loss_type == "Xent":
         loss_function = BCEWithLogitsLoss(reduction="mean")
         print("[LOSS] Using BCEWithLogitsLoss")
     elif loss_type == "Dice_nosmooth":
-        loss_function = DiceLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
-        print(f"[LOSS] Using Custom loss, Dice with no smooth at numerator, do_sigmoid={do_sigmoid}, "
-              f"do_softmax={do_softmax}")
+        # loss_function = DiceLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
+                                         smooth_num=0.0, smooth_den=1e-5, squared_pred=squared_pred)
+        print(f"[LOSS] Using DiceLossExtended, Dice with no smooth at numerator, do_sigmoid={do_sigmoid}, "
+              f"do_softmax={do_softmax}, squared_pred={squared_pred}")
+    elif loss_type == "Batch_Dice":
+        smooth_num = 1e-5
+        smooth_den = smooth_num
+        loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
+                                         smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred,
+                                         batch_version=True)
+        print(f"[LOSS] Using DiceLossExtended - BATCH VERSION, "
+              f"Dice with {smooth_num} at numerator and {smooth_den} at denominator, "
+              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
     elif loss_type == "Tversky":
         loss_function = monai.losses.TverskyLoss(sigmoid=do_sigmoid, softmax=do_softmax)
         print(f"[LOSS] Using monai.losses.TverskyLoss with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
@@ -344,7 +360,8 @@ def main():
         print(f"[LOSS] Using Custom loss, Tversky with no smooth at numerator with do_sigmoid={do_sigmoid}, "
               f"do_softmax={do_softmax}")
     elif loss_type == "Dice_Xent":
-        loss_function = DiceAndBinaryXentLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        loss_function = DiceAndBinaryXentLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax,
+                                              smooth_num=0.0, smooth_den=1e-5)
         print(f"[LOSS] Using Custom loss, Dice + Xent with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
     else:
         raise IOError("Unrecognized loss type")
