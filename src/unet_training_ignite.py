@@ -137,7 +137,6 @@ def main():
     print(yaml.dump(config_info))
 
     # GPU params
-    cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']
     # training and validation params
     if 'seg_labels' in config_info['training'].keys():
@@ -274,7 +273,6 @@ def main():
             ToTensord(keys=['img', 'seg'])
         ])
         do_shuffle = False
-        collate_fn_to_use = None
     else:
         # - add extraction of 2D slices from validation set to emulate how loss is computed at training
         val_transforms = Compose([

@@ -1,5 +1,4 @@
 device:
-  cuda_device: 1
   num_workers: 1
 
 inference:

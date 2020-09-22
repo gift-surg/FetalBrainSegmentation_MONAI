@@ -63,7 +63,6 @@ def main():
     print(yaml.dump(config_info))
 
     # GPU params
-    cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']
     # inference params
     nr_out_channels = config_info['inference']['nr_out_channels']

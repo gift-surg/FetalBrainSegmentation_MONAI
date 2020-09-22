@@ -49,6 +49,9 @@ class SlidingWindowInferer2D(Inferer):
     """
     Sliding window method for model inference,
     with `sw_batch_size` windows for every model.forward().
+    Modified from monai.inferers.SlidingWindowInferer to squeeze the extra dimension derived from cropping sliced from a
+    3D volume. In other words, reduces the input from [B, C, H, W, 1] to [B, C, H, W] for the forward pass through the
+    network and then reshapes it back to [B, C, H, W, 1], before stiching all the patches back together.
 
     Args:
         roi_size (list, tuple): the window size to execute SlidingWindow evaluation.
@@ -98,6 +101,8 @@ class SlidingWindowInferer2DWithResize(Inferer):
     """
     Sliding window method for model inference,
     with `sw_batch_size` windows for every model.forward().
+    At inference, it applies a "resize" operation for the first two dimensions to match the network input size.
+    After the forward pass, the network output is resized back to the original size.
 
     Args:
         roi_size (list, tuple): the window size to execute SlidingWindow evaluation.
