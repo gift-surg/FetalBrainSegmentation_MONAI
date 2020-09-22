@@ -92,3 +92,63 @@ class SlidingWindowInferer2D(Inferer):
         predictor_2d = Predict2DFrom3D(network)
         return sliding_window_inference(inputs, self.roi_size, self.sw_batch_size,
                                         predictor_2d, self.overlap, self.mode)
+
+
+class SlidingWindowInferer2DWithResize(Inferer):
+    """
+    Sliding window method for model inference,
+    with `sw_batch_size` windows for every model.forward().
+
+    Args:
+        roi_size (list, tuple): the window size to execute SlidingWindow evaluation.
+            If it has non-positive components, the corresponding `inputs` size will be used.
+            if the components of the `roi_size` are non-positive values, the transform will use the
+            corresponding components of img size. For example, `roi_size=(32, -1)` will be adapted
+            to `(32, 64)` if the second spatial dimension size of img is `64`.
+        sw_batch_size: the batch size to run window slices.
+        overlap: Amount of overlap between scans.
+        mode: {``"constant"``, ``"gaussian"``}
+            How to blend output of overlapping windows. Defaults to ``"constant"``.
+
+            - ``"constant``": gives equal weight to all predictions.
+            - ``"gaussian``": gives less weight to predictions on edges of windows.
+
+    Note:
+        the "sw_batch_size" here is to run a batch of window slices of 1 input image,
+        not batch size of input images.
+
+    """
+
+    def __init__(
+        self, roi_size, sw_batch_size: int = 1, overlap: float = 0.25, mode: Union[BlendMode, str] = BlendMode.CONSTANT
+    ):
+        Inferer.__init__(self)
+        self.roi_size = roi_size
+        self.sw_batch_size = sw_batch_size
+        self.overlap = overlap
+        self.mode: BlendMode = BlendMode(mode)
+
+    def __call__(self, inputs: torch.Tensor, network):
+        """
+        Unified callable function API of Inferers.
+
+        Args:
+            inputs (torch.tensor): model input data for inference.
+            network (Network): target model to execute inference.
+
+        """
+        # resize the input to the appropriate network input
+        orig_size = list(inputs.shape)
+        resized_size = copy.deepcopy(orig_size)
+        resized_size[2] = self.roi_size[0]
+        resized_size[3] = self.roi_size[1]
+        inputs_resize = torch.nn.functional.interpolate(inputs, size=resized_size[2:], mode='trilinear')
+
+        # convert the network to a callable that squeezes 3D slices to 2D before performing the network prediction
+        predictor_2d = Predict2DFrom3D(network)
+        outputs = sliding_window_inference(inputs_resize, self.roi_size, self.sw_batch_size,
+                                           predictor_2d, self.overlap, self.mode)
+
+        # resize back to original size
+        outputs = torch.nn.functional.interpolate(outputs, size=orig_size[2:], mode='nearest')
+        return outputs
