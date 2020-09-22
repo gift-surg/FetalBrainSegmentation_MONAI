@@ -15,7 +15,7 @@ from typing import Callable, Optional, Union
 
 import torch
 import torch.nn.functional as F
-from torch.nn.modules.loss import _Loss, BCEWithLogitsLoss, BCELoss
+from torch.nn.modules.loss import _Loss, BCEWithLogitsLoss, BCELoss, CrossEntropyLoss
 
 # sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
@@ -217,6 +217,7 @@ class DiceAndBinaryXentLoss(_Loss):
         super().__init__(reduction=LossReduction(reduction).value)
         self.weight_dice = weight_dice
         self.weight_xent = weight_xent
+        self.sigmoid = sigmoid
 
         # self.dice_loss_fn = monai.losses.DiceLoss(do_sigmoid=self.do_sigmoid,
         #                                           do_softmax=self.do_softmax,
@@ -234,10 +235,13 @@ class DiceAndBinaryXentLoss(_Loss):
                                              batch_version=batch_version,
                                              smooth_num=smooth_num,
                                              smooth_den=smooth_den)
-
-        if self.do_sigmoid:
+        # TODO: if i have one-hot encoding, should I use binary of normal cross entropy?
+        # if self.num_classes == 1:
+        if self.sigmoid:
+            "Using BCEWithLogitsLoss"
             self.xent_fn = BCEWithLogitsLoss(reduction=LossReduction(reduction).value)
         else:
+            "Using BCELoss"
             self.xent_fn = BCELoss(reduction=LossReduction(reduction).value)
 
     def forward(self, input, target, smooth_num=1e-5, smooth_den=1e-5):
@@ -248,9 +252,9 @@ class DiceAndBinaryXentLoss(_Loss):
             smooth_num: a small constant to be added to the numerator of Dice to avoid nan.
             smooth_den: a small constant to be added to the denominator of Dice to avoid nan.
         """
-        n_pred_ch = input.shape[1]
-        if n_pred_ch > 1:
-            raise IOError("DiceAndBinaryXentLoss not yet implemented for multi-class problems")
+        # n_pred_ch = input.shape[1]
+        # if n_pred_ch > 1:
+        #     raise IOError("DiceAndBinaryXentLoss not yet implemented for multi-class problems")
         dice_loss = self.dice_loss_fn(input, target)
         xent_loss = self.xent_fn(input, target)
         return self.weight_dice * dice_loss + self.weight_xent * xent_loss

@@ -3,8 +3,8 @@ device:
   num_workers: 4
 
 training:
-  seg_labels: [1]
-  loss_type: "Dice"
+  seg_labels: [0, 1]
+  loss_type: "Dice_Xent"
   batch_size_train: 10
   batch_size_valid: 1
   nr_train_epochs: 10000
@@ -31,10 +31,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.2.0_tests"
-  output_subfix: "monai0.2.0-MONAI_unet-MONAI_Dice_squared_pred"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval"
+  output_subfix: "monai0.2.0-MONAI_unet-Batch_Dice_Xent_two_channel"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_two_channel"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Use the MONAI Dice implementation with smooth both at num an denominator, but use squared predictions flag. (MONAI Unet with 2 res units)."
+  message: "Running with Batch Dice + xent to replicate nnUnet behaviour - Two channels"

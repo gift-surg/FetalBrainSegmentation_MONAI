@@ -318,14 +318,13 @@ def main():
     print("Model summary:")
     summary(net, input_data=(1, 96, 96))
 
-    smooth = None
-    squared_pred = True
+    squared_pred = False
     if nr_out_channels == 1:
         do_sigmoid = True
         do_softmax = False
     elif nr_out_channels > 1:
-        do_sigmoid = False
-        do_softmax = True
+        do_sigmoid = True
+        do_softmax = False
     if loss_type == "Dice":
         smooth_num = 1e-5
         smooth_den = smooth_num
@@ -338,11 +337,13 @@ def main():
         loss_function = BCEWithLogitsLoss(reduction="mean")
         print("[LOSS] Using BCEWithLogitsLoss")
     elif loss_type == "Dice_nosmooth":
+        smooth_num = 0.0
+        smooth_den = 1e-5
         # loss_function = DiceLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
         loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
-                                         smooth_num=0.0, smooth_den=1e-5, squared_pred=squared_pred)
-        print(f"[LOSS] Using DiceLossExtended, Dice with no smooth at numerator, do_sigmoid={do_sigmoid}, "
-              f"do_softmax={do_softmax}, squared_pred={squared_pred}")
+                                         smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred)
+        print(f"[LOSS] Using DiceLossExtended, Dice with smooth_num={smooth_num} and smooth_den={smooth_den},"
+              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
     elif loss_type == "Batch_Dice":
         smooth_num = 1e-5
         smooth_den = smooth_num
@@ -360,9 +361,14 @@ def main():
         print(f"[LOSS] Using Custom loss, Tversky with no smooth at numerator with do_sigmoid={do_sigmoid}, "
               f"do_softmax={do_softmax}")
     elif loss_type == "Dice_Xent":
-        loss_function = DiceAndBinaryXentLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax,
-                                              smooth_num=0.0, smooth_den=1e-5)
-        print(f"[LOSS] Using Custom loss, Dice + Xent with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
+        smooth_num = 1e-5
+        smooth_den = 1e-5
+        batch_version = True
+        loss_function = DiceAndBinaryXentLoss(sigmoid=do_sigmoid, softmax=do_softmax,
+                                              smooth_num=smooth_num, smooth_den=smooth_den, batch_version=batch_version)
+        print(f"[LOSS] Using Custom loss, Dice + Xent with do_sigmoid={do_sigmoid}, do_softmax={do_softmax},"
+              f"Dice with {smooth_num} at numerator and {smooth_den} at denominator, "
+              f" squared_pred={squared_pred} and batch_version={batch_version}")
     else:
         raise IOError("Unrecognized loss type")
 
