@@ -1,14 +1,13 @@
 device:
-  cuda_device: 1
   num_workers: 4
 
 training:
-  seg_labels: [1]
+  seg_labels: [0, 1]
   loss_type: "Dice_Xent"
   batch_size_train: 10
   batch_size_valid: 1
-  nr_train_epochs: 20
-  validation_every_n_epochs: 5
+  nr_train_epochs: 10000
+  validation_every_n_epochs: 20
   sliding_window_validation: True
   optimiser_choice: "Adam"
   opt_momentum: null
@@ -30,11 +29,11 @@ data:
                     "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_validation_p_files.txt"]
 
 output:
-  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds"
-  output_subfix: "test_monai-0.2.0_recomputecache"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_monai0.2.0"
+  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.2.0_tests"
+  output_subfix: "monai0.2.0-MONAI_unet-Batch_Dice_Xent_two_channel"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_two_channel"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Quick run with new monai 0.2.0 to check for compatibility with my code - recompute the cache to check impact of transforms"
+  message: "Running with Batch Dice + xent to replicate nnUnet behaviour - Two channels"

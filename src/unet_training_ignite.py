@@ -1,42 +1,62 @@
-import os
-import sys
 import logging
+import os
+import warnings
+import sys
 from datetime import datetime
 import yaml
 import argparse
 from pathlib import Path
 
+import nibabel as nib
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from ignite.engine import Engine, Events, create_supervised_trainer, create_supervised_evaluator, _prepare_batch
-from ignite.handlers import ModelCheckpoint, EarlyStopping
 from torchsummary import summary
-from torch.nn.modules.loss import BCEWithLogitsLoss, BCELoss
+from torch.utils.tensorboard import SummaryWriter
+from torch.nn.modules.loss import BCEWithLogitsLoss
+from ignite.metrics import Accuracy
+from ignite.engine import Events
 
-# sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate
-from monai.transforms import Compose, LoadNiftid, AddChanneld, NormalizeIntensityd, Resized, \
-     RandSpatialCropd, RandRotated, RandFlipd, SqueezeDimd, ToTensord
-from monai.handlers import CheckpointLoader, \
-    StatsHandler, TensorBoardStatsHandler, TensorBoardImageHandler, LrScheduleHandler, MeanDice, stopping_fn_from_metric
-from monai.networks.utils import predict_segmentation
-from monai.utils import set_determinism
-from monai.metrics import compute_meandice
-from monai.visualize import plot_2d_or_3d_image
-from monai.utils.misc import is_scalar
-import warnings
-import logging
+from monai.utils import set_determinism, is_scalar
+from monai.engines import SupervisedEvaluator, SupervisedTrainer
+from monai.handlers import (
+    CheckpointSaver,
+    LrScheduleHandler,
+    MeanDice,
+    StatsHandler,
+    TensorBoardImageHandler,
+    TensorBoardStatsHandler,
+    ValidationHandler,
+    CheckpointLoader
+)
+from monai.inferers import SimpleInferer, SlidingWindowInferer
+from monai.transforms import (
+    Activationsd,
+    AddChanneld,
+    NormalizeIntensityd,
+    Resized,
+    AsDiscreted,
+    Compose,
+    KeepLargestConnectedComponentd,
+    LoadNiftid,
+    RandSpatialCropd,
+    RandRotated,
+    RandFlipd,
+    SqueezeDimd,
+    ToTensord,
+)
 
 from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
 from custom_unet import CustomUNet
-from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth
+from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth, DiceLossExtended
 from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric, TverskyMetric
 from custom_transform import ConverToOneHotd
+from custom_inferer import SlidingWindowInferer2D
+from custom_trainer import SupervisedTrainerClipping
+from custom_handlers import MyTensorBoardImageHandler
 
 DEFAULT_KEY_VAL_FORMAT = '{}: {:.4f} '
 DEFAULT_TAG = 'Loss'
@@ -95,100 +115,6 @@ def my_iteration_print_logger(engine):
     engine.logger.info(' '.join([base_str, out_str]))
 
 
-class MyTensorBoardImageHandler(object):
-    """TensorBoardImageHandler is an ignite Event handler that can visualise images, labels and outputs as 2D/3D images.
-    2D output (shape in Batch, channel, H, W) will be shown as simple image using the first element in the batch,
-    for 3D to ND output (shape in Batch, channel, H, W, D) input, each of ``self.max_channels`` number of images'
-    last three dimensions will be shown as animated GIF along the last axis (typically Depth).
-
-    It's can be used for any Ignite Engine (trainer, validator and evaluator).
-    User can easily added it to engine for any expected Event, for example: ``EPOCH_COMPLETED``,
-    ``ITERATION_COMPLETED``. The expected data source is ignite's ``engine.state.batch`` and ``engine.state.output``.
-
-    Default behavior:
-        - Show y_pred as images (GIF for 3D) on TensorBoard when Event triggered,
-        - need to use ``batch_transform`` and ``output_transform`` to specify
-          how many images to show and show which channel.
-        - Expects ``batch_transform(engine.state.batch)`` to return data
-          format: (image[N, channel, ...], label[N, channel, ...]).
-        - Expects ``output_transform(engine.state.output)`` to return a torch
-          tensor in format (y_pred[N, channel, ...], loss).
-
-     """
-
-    def __init__(self,
-                 summary_writer=None,
-                 batch_transform=lambda x: x,
-                 output_transform=lambda x: x,
-                 global_iter_transform=lambda x: x,
-                 index=None,
-                 max_channels=1,
-                 max_frames=64):
-        """
-        Args:
-            summary_writer (SummaryWriter): user can specify TensorBoard SummaryWriter,
-                default to create a new writer.
-            batch_transform (Callable): a callable that is used to transform the
-                ``ignite.engine.batch`` into expected format to extract several label data.
-            output_transform (Callable): a callable that is used to transform the
-                ``ignite.engine.output`` into expected format to extract several output data.
-            global_iter_transform (Callable): a callable that is used to customize global step number for TensorBoard.
-                For example, in evaluation, the evaluator engine needs to know current epoch from trainer.
-            index (int): plot which element in a data batch, default is the first element.
-            max_channels (int): number of channels to plot.
-            max_frames (int): number of frames for 2D-t plot.
-        """
-        self._writer = SummaryWriter() if summary_writer is None else summary_writer
-        self.batch_transform = batch_transform
-        self.output_transform = output_transform
-        self.global_iter_transform = global_iter_transform
-        self.index = index
-        self.max_frames = max_frames
-        self.max_channels = max_channels
-
-    def __call__(self, engine):
-        step = self.global_iter_transform(engine.state.iteration)
-
-        show_images = self.batch_transform(engine.state.batch)[0]
-        if torch.is_tensor(show_images):
-            show_images = show_images.detach().cpu().numpy()
-
-        if show_images is not None:
-            if not isinstance(show_images, np.ndarray):
-                raise ValueError('output_transform(engine.state.output)[0] must be an ndarray or tensor.')
-            if self.index is None:
-                self.index = [0]
-            elif self.index in ['all', 'ALL', 'All']:
-                print(show_images.shape)
-                self.index = range(0, show_images.shape[0])
-                print(self.index)
-            for idx in self.index:
-                plot_2d_or_3d_image(show_images, step, self._writer, idx,
-                                    self.max_channels, self.max_frames, 'input_0_' + str(idx))
-
-        show_labels = self.batch_transform(engine.state.batch)[1]
-        if torch.is_tensor(show_labels):
-            show_labels = show_labels.detach().cpu().numpy()
-        if show_labels is not None:
-            if not isinstance(show_labels, np.ndarray):
-                raise ValueError('batch_transform(engine.state.batch)[1] must be an ndarray or tensor.')
-            for idx in self.index:
-                plot_2d_or_3d_image(show_labels, step, self._writer, idx,
-                                    self.max_channels, self.max_frames, 'input_1_' + str(idx))
-
-        show_outputs = self.output_transform(engine.state.output)
-        if torch.is_tensor(show_outputs):
-            show_outputs = show_outputs.detach().cpu().numpy()
-        if show_outputs is not None:
-            if not isinstance(show_outputs, np.ndarray):
-                raise ValueError('output_transform(engine.state.output) must be an ndarray or tensor.')
-            for idx in self.index:
-                plot_2d_or_3d_image(show_outputs, step, self._writer, idx,
-                                    self.max_channels, self.max_frames, 'output_' + str(idx))
-
-        self._writer.flush()
-
-
 def main():
     """
     Basic UNet as implemented in MONAI for Fetal Brain Segmentation, but using
@@ -211,7 +137,6 @@ def main():
     print(yaml.dump(config_info))
 
     # GPU params
-    cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']
     # training and validation params
     if 'seg_labels' in config_info['training'].keys():
@@ -264,7 +189,6 @@ def main():
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-    torch.cuda.set_device(cuda_device)
     print("\n#### GPU INFORMATION ###")
     print(f"Using device number: {torch.cuda.current_device()}, name: {torch.cuda.get_device_name()}")
     print(f"Device available: {torch.cuda.is_available()}\n")
@@ -327,14 +251,13 @@ def main():
     # train_ds = monai.data.CacheDataset(data=train_files, transform=train_transforms, cache_rate=1.0,
     #                                    num_workers=num_workers)
     train_ds = monai.data.PersistentDataset(data=train_files, transform=train_transforms, cache_dir=persistent_cache)
-    train_loader = DataLoader(train_ds,
-                              batch_size=batch_size_train,
-                              shuffle=True, num_workers=num_workers,
-                              collate_fn=list_data_collate,
-                              pin_memory=torch.cuda.is_available())
-    check_train_data = monai.utils.misc.first(train_loader)
-    print("Training data tensor shapes")
-    print(check_train_data['img'].shape, check_train_data['seg'].shape)
+    train_loader = monai.data.DataLoader(train_ds,
+                                         batch_size=batch_size_train,
+                                         shuffle=True, num_workers=num_workers,
+                                         pin_memory=torch.cuda.is_available())
+    # check_train_data = monai.utils.misc.first(train_loader)
+    # print("Training data tensor shapes")
+    # print(check_train_data['img'].shape, check_train_data['seg'].shape)
 
     # data preprocessing for validation:
     # - convert data to right format [batch, channel, dim, dim, dim]
@@ -350,7 +273,6 @@ def main():
             ToTensord(keys=['img', 'seg'])
         ])
         do_shuffle = False
-        collate_fn_to_use = None
     else:
         # - add extraction of 2D slices from validation set to emulate how loss is computed at training
         val_transforms = Compose([
@@ -364,24 +286,23 @@ def main():
             ToTensord(keys=['img', 'seg'])
         ])
         do_shuffle = True
-        collate_fn_to_use = list_data_collate
     # create a validation data loader
     # val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
     # val_ds = monai.data.CacheDataset(data=val_files, transform=val_transforms, cache_rate=1.0,
     #                                    num_workers=num_workers)
     val_ds = monai.data.PersistentDataset(data=val_files, transform=val_transforms, cache_dir=persistent_cache)
-    val_loader = DataLoader(val_ds,
-                            batch_size=batch_size_valid,
-                            shuffle=do_shuffle,
-                            collate_fn=collate_fn_to_use,
-                            num_workers=num_workers)
-    check_valid_data = monai.utils.misc.first(val_loader)
-    print("Validation data tensor shapes")
-    print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
+    val_loader = monai.data.DataLoader(val_ds,
+                                       batch_size=batch_size_valid,
+                                       shuffle=do_shuffle,
+                                       num_workers=num_workers)
+    # check_valid_data = monai.utils.misc.first(val_loader)
+    # print("Validation data tensor shapes")
+    # print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
 
     """
     Network preparation
     """
+    current_device = torch.device("cuda:0")
     # # Create UNet, DiceLoss and Adam optimizer.
     net = monai.networks.nets.UNet(
         dimensions=2,
@@ -390,37 +311,62 @@ def main():
         channels=(16, 32, 64, 128, 256),
         strides=(2, 2, 2, 2),
         num_res_units=2,
-    )
+    ).to(current_device)
     # net = CustomUNet()
     print("Model summary:")
     summary(net, input_data=(1, 96, 96))
 
-    smooth = None
+    squared_pred = False
     if nr_out_channels == 1:
         do_sigmoid = True
         do_softmax = False
     elif nr_out_channels > 1:
-        do_sigmoid = False
-        do_softmax = True
+        do_sigmoid = True
+        do_softmax = False
     if loss_type == "Dice":
-        loss_function = monai.losses.DiceLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
-        smooth = 1e-5
-        print(f"[LOSS] Using monai.losses.DiceLoss with smooth = {smooth}, do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
+        smooth_num = 1e-5
+        smooth_den = smooth_num
+        # loss_function = monai.losses.DiceLoss(sigmoid=do_sigmoid, softmax=do_softmax)
+        loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
+                                         smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred)
+        print(f"[LOSS] Using DiceLossExtended with smooth = {smooth_num}, "
+              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
     elif loss_type == "Xent":
         loss_function = BCEWithLogitsLoss(reduction="mean")
         print("[LOSS] Using BCEWithLogitsLoss")
     elif loss_type == "Dice_nosmooth":
-        loss_function = DiceLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
-        print(f"[LOSS] Using Custom loss, Dice with no smooth at numerator, do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
+        smooth_num = 0.0
+        smooth_den = 1e-5
+        # loss_function = DiceLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
+                                         smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred)
+        print(f"[LOSS] Using DiceLossExtended, Dice with smooth_num={smooth_num} and smooth_den={smooth_den},"
+              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
+    elif loss_type == "Batch_Dice":
+        smooth_num = 1e-5
+        smooth_den = smooth_num
+        loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
+                                         smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred,
+                                         batch_version=True)
+        print(f"[LOSS] Using DiceLossExtended - BATCH VERSION, "
+              f"Dice with {smooth_num} at numerator and {smooth_den} at denominator, "
+              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
     elif loss_type == "Tversky":
-        loss_function = monai.losses.TverskyLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
+        loss_function = monai.losses.TverskyLoss(sigmoid=do_sigmoid, softmax=do_softmax)
         print(f"[LOSS] Using monai.losses.TverskyLoss with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
     elif loss_type == "Tversky_nosmooth":
         loss_function = TverskyLoss_noSmooth(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
-        print(f"[LOSS] Using Custom loss, Tversky with no smooth at numerator with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
+        print(f"[LOSS] Using Custom loss, Tversky with no smooth at numerator with do_sigmoid={do_sigmoid}, "
+              f"do_softmax={do_softmax}")
     elif loss_type == "Dice_Xent":
-        loss_function = DiceAndBinaryXentLoss(do_sigmoid=do_sigmoid, do_softmax=do_softmax)
-        print(f"[LOSS] Using Custom loss, Dice + Xent with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
+        smooth_num = 1e-5
+        smooth_den = 1e-5
+        batch_version = True
+        loss_function = DiceAndBinaryXentLoss(sigmoid=do_sigmoid, softmax=do_softmax,
+                                              smooth_num=smooth_num, smooth_den=smooth_den, batch_version=batch_version)
+        print(f"[LOSS] Using Custom loss, Dice + Xent with do_sigmoid={do_sigmoid}, do_softmax={do_softmax},"
+              f"Dice with {smooth_num} at numerator and {smooth_den} at denominator, "
+              f" squared_pred={squared_pred} and batch_version={batch_version}")
     else:
         raise IOError("Unrecognized loss type")
 
@@ -438,46 +384,109 @@ def main():
         print("[OPTIMISER] WARNING: Invalid optimiser choice, using Adam by default")
         opt = torch.optim.Adam(net.parameters(), lr)
 
-    current_device = torch.cuda.current_device()
+    lr_scheduler = None
     if lr_decay is not None:
         lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=opt, gamma=lr_decay, last_epoch=-1)
+
+    def prepare_batch(batchdata):
+        assert isinstance(batchdata, dict), "prepare_batch expects dictionary input data."
+        return (
+            (batchdata['img'], batchdata['seg'])
+            if 'seg' in batchdata
+            else (batchdata['img'], None)
+        )
+
+    """
+    Set ignite evaluator to perform validation at training
+    """
+    val_post_transforms = Compose(
+        [
+            Activationsd(keys="pred", sigmoid=True),
+        ]
+    )
+    val_handlers = [
+        StatsHandler(output_transform=lambda x: None),
+        TensorBoardStatsHandler(log_dir=os.path.join(out_model_dir, "valid"), output_transform=lambda x: None,
+                                global_epoch_transform=lambda x: trainer.state.iteration),
+        CheckpointSaver(save_dir=out_model_dir, save_dict={"valid": net}, save_key_metric=True),
+    ]
+    if val_image_to_tensorboad:
+        val_handlers.append(TensorBoardImageHandler(log_dir=os.path.join(out_model_dir, "valid"),
+                                                    batch_transform=lambda x: (x["img"], x["seg"]),
+                                                    output_transform=lambda x: x["pred"], interval=2))
+
+    if sliding_window_validation:
+        print("3D evaluator is used")
+        inferer = SlidingWindowInferer2D(roi_size=[96, 96, 1], sw_batch_size=4, overlap=0.0)
+    else:
+        print("2D evaluator is used")
+        inferer = SimpleInferer()
+
+    evaluator = SupervisedEvaluator(
+        device=current_device,
+        val_data_loader=val_loader,
+        network=net,
+        prepare_batch=prepare_batch,
+        inferer=inferer,
+        post_transform=val_post_transforms,
+        key_val_metric={
+            "Mean_dice": MeanDice(include_background=True, output_transform=lambda x: (x["pred"], x["label"]))
+        },
+        additional_metrics={
+            "Loss": 1.0 - MeanDice(include_background=True, output_transform=lambda x: (x["pred"], x["label"]))
+        },
+        val_handlers=val_handlers
+    )
 
     """
     Set ignite trainer
     """
-    # function to manage batch at training
-    def prepare_batch(batch, device=None, non_blocking=False):
-        return _prepare_batch((batch['img'].to(device), batch['seg'].to(device)), device, non_blocking)
+    train_post_transforms = Compose(
+        [
+            Activationsd(keys="pred", sigmoid=True),
+        ]
+    )
 
-    trainer = create_supervised_trainer_with_clipping(model=net, optimizer=opt, loss_fn=loss_function,
-                                                      device=current_device, non_blocking=False, prepare_batch=prepare_batch,
-                                                      clip_norm=clipping, smooth_loss=smooth)
-    print("Using gradient norm clipping at max = {}".format(clipping))
+    epoch_len = len(train_ds) // train_loader.batch_size
+    validation_every_n_iters = validation_every_n_epochs * epoch_len
 
-    # adding checkpoint handler to save models (network params and optimizer stats) during training
-    if model_to_load is not None:
-        checkpoint_handler = CheckpointLoader(load_path=model_to_load, load_dict={'net': net,
-                                                                                  'opt': opt,
-                                                                                  })
-        checkpoint_handler.attach(trainer)
-        state = trainer.state_dict()
-    else:
-        checkpoint_handler = ModelCheckpoint(out_model_dir, 'net', n_saved=max_nr_models_saved, require_empty=False)
-        # trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=save_params)
-        trainer.add_event_handler(event_name=Events.EPOCH_COMPLETED,
-                                  handler=checkpoint_handler,
-                                  to_save={'net': net, 'opt': opt})
-
-    # StatsHandler prints loss at every iteration and print metrics at every epoch
-    train_stats_handler = StatsHandler(iteration_print_logger=my_iteration_print_logger,
-                                       name='trainer'
-                                       )
-    train_stats_handler.attach(trainer)
-
-    # TensorBoardStatsHandler plots loss at every iteration and plots metrics at every epoch, same as StatsHandler
     writer_train = SummaryWriter(log_dir=os.path.join(out_model_dir, "train"))
-    train_tensorboard_stats_handler = TensorBoardStatsHandler(summary_writer=writer_train)
-    train_tensorboard_stats_handler.attach(trainer)
+    train_handlers = [
+        ValidationHandler(validator=evaluator, interval=validation_every_n_iters, epoch_level=False),
+        StatsHandler(tag_name="train_loss", output_transform=lambda x: x["loss"]),
+        TensorBoardStatsHandler(summary_writer=writer_train,
+                                log_dir=os.path.join(out_model_dir, "train"), tag_name="Loss",
+                                output_transform=lambda x: x["loss"],
+                                global_epoch_transform=lambda x: trainer.state.iteration),
+        CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net, "opt": opt},
+                        save_final=True, save_key_metric=True, key_metric_name='Mean_dice', key_metric_n_saved=1,
+                        save_interval=2, epoch_level=True,
+                        n_saved=max_nr_models_saved),
+    ]
+    if model_to_load is not None:
+        train_handlers.append(CheckpointLoader(load_path=model_to_load, load_dict={"net": net, "opt": opt}))
+
+    if lr_scheduler is not None:
+        print("Using Exponential LR decay")
+        train_handlers.append(LrScheduleHandler(lr_scheduler=lr_scheduler, print_lr=True))
+
+    trainer = SupervisedTrainerClipping(
+        device=current_device,
+        max_epochs=nr_train_epochs,
+        train_data_loader=train_loader,
+        network=net,
+        optimizer=opt,
+        loss_function=loss_function,
+        prepare_batch=prepare_batch,
+        inferer=SimpleInferer(),
+        amp=False,
+        post_transform=train_post_transforms,
+        key_train_metric={"Mean_dice": MeanDice(include_background=True,
+                                                output_transform=lambda x: (x["pred"], x["label"]))},
+        train_handlers=train_handlers,
+        grad_clipping=clipping
+    )
+    print("Using gradient norm clipping at max = {}".format(clipping))
 
     # train_tensorboard_image_handler = MyTensorBoardImageHandler(
     #     summary_writer=writer_train,
@@ -489,82 +498,7 @@ def main():
     # trainer.add_event_handler(
     #     event_name=Events.ITERATION_COMPLETED(every=17088), handler=train_tensorboard_image_handler)
 
-    if lr_decay is not None:
-        print("Using Exponential LR decay")
-        lr_schedule_handler = LrScheduleHandler(lr_scheduler, print_lr=True, name="lr_scheduler", writer=writer_train)
-        lr_schedule_handler.attach(trainer)
-
-    """
-    Set ignite evaluator to perform validation at training
-    """
-    # set parameters for validation
-    metric_name = 'Mean_Dice'
-    # add evaluation metric to the evaluator engine
-    val_metrics = {
-        # "Loss": BinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
-        # "Loss": MeanDiceAndBinaryXentMetric(add_sigmoid=True, to_onehot_y=False),
-        "Loss": 1.0 - MeanDice(sigmoid=True, to_onehot_y=False),
-        # "Loss": TverskyMetric(add_sigmoid=True, to_onehot_y=False),
-        "Mean_Dice": MeanDice(sigmoid=True, to_onehot_y=False)
-    }
-
-    if sliding_window_validation:
-
-        # function to manage validation with sliding window inference
-        def prepare_sliding_window_inference(x, model):
-            return sliding_window_inference(inputs=x, roi_size=(96, 96, 1), sw_batch_size=batch_size_valid,
-                                            predictor=model)
-        print("3D evaluator is used")
-        evaluator = create_evaluator_with_sliding_window(model=net, metrics=val_metrics, device=current_device,
-                                                         non_blocking=True, prepare_batch=prepare_batch,
-                                                         sliding_window_inference=prepare_sliding_window_inference)
-    else:
-        # ignite evaluator expects batch=(img, seg) and returns output=(y_pred, y) at every iteration,
-        # user can add output_transform to return other values
-        print("2D evaluator is used")
-        evaluator = create_supervised_evaluator(model=net, metrics=val_metrics, device=current_device,
-                                                non_blocking=True, prepare_batch=prepare_batch)
-
-    epoch_len = len(train_ds) // train_loader.batch_size
-    validation_every_n_iters = validation_every_n_epochs * epoch_len
-
-    @trainer.on(Events.ITERATION_COMPLETED(every=validation_every_n_iters))
-    def run_validation(engine):
-        evaluator.run(val_loader)
-
-    # add early stopping handler to evaluator
-    # early_stopper = EarlyStopping(patience=4,
-    #                               score_function=stopping_fn_from_metric(metric_name),
-    #                               trainer=trainer)
-    # evaluator.add_event_handler(event_name=Events.EPOCH_COMPLETED, handler=early_stopper)
-
-    # add stats event handler to print validation stats via evaluator
-    val_stats_handler = StatsHandler(
-        name='evaluator',
-        output_transform=lambda x: None,  # no need to print loss value, so disable per iteration output
-        global_epoch_transform=lambda x: trainer.state.epoch)  # fetch global epoch number from trainer
-    val_stats_handler.attach(evaluator)
-
-    # add handler to record metrics to TensorBoard at every validation epoch
-    writer_valid = SummaryWriter(log_dir=os.path.join(out_model_dir, "valid"))
-    val_tensorboard_stats_handler = TensorBoardStatsHandler(
-        summary_writer=writer_valid,
-        output_transform=lambda x: None,  # no need to plot loss value, so disable per iteration output
-        global_epoch_transform=lambda x: trainer.state.iteration)  # fetch global iteration number from trainer
-    val_tensorboard_stats_handler.attach(evaluator)
-
-    # add handler to draw the first image and the corresponding label and model output in the last batch
-    # here we draw the 3D output as GIF format along the depth axis, every 2 validation iterations.
-    if val_image_to_tensorboad:
-        val_tensorboard_image_handler = TensorBoardImageHandler(
-            summary_writer=writer_valid,
-            batch_transform=lambda batch: (batch['img'], batch['seg']),
-            output_transform=lambda output: predict_segmentation(output[0]),
-            global_iter_transform=lambda x: trainer.state.epoch
-        )
-        evaluator.add_event_handler(
-            event_name=Events.ITERATION_COMPLETED(every=1), handler=val_tensorboard_image_handler)
-
+    # TODO: add plotting of gradients
     # get the network gradients and add them to tensorboard
     @trainer.on(Events.ITERATION_COMPLETED(every=1))
     def get_network_gradient(engine):
@@ -590,7 +524,7 @@ def main():
     """
     Run training
     """
-    state = trainer.run(train_loader, nr_train_epochs)
+    trainer.run()
     print("Done!")
 
 

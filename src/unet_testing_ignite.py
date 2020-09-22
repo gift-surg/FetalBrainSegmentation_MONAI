@@ -22,18 +22,26 @@ import torch
 from ignite.engine import Engine
 from torch.utils.data import DataLoader
 
-sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
+# sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
 import monai
 from monai.data import list_data_collate
-from monai.transforms import Compose, LoadNiftid, AddChanneld, NormalizeIntensityd, Resized, \
-     RandSpatialCropd, RandRotated, RandFlipd, SqueezeDimd, ToTensord
+from monai.engines import SupervisedEvaluator
+from monai.handlers import CheckpointLoader, MeanDice, SegmentationSaver, StatsHandler
+from monai.transforms import (
+    Activationsd,
+    AddChanneld,
+    NormalizeIntensityd,
+    AsDiscreted,
+    Compose,
+    KeepLargestConnectedComponentd,
+    LoadNiftid,
+    ToTensord,
+)
 from monai.networks.utils import predict_segmentation
 from monai.networks.nets import UNet
-from monai.handlers import SegmentationSaver, CheckpointLoader, StatsHandler, MeanDice
 
 from io_utils import create_data_list
-from sliding_window_inference import sliding_window_inference
-from custom_ignite_engines import create_evaluator_with_sliding_window
+from custom_inferer import SlidingWindowInferer2DWithResize
 
 sys.path.append("/mnt/data/mranzini/Code/Demic-v0.1")
 from Demic.util.image_process import *
@@ -55,7 +63,6 @@ def main():
     print(yaml.dump(config_info))
 
     # GPU params
-    cuda_device = config_info['device']['cuda_device']
     num_workers = config_info['device']['num_workers']
     # inference params
     nr_out_channels = config_info['inference']['nr_out_channels']
@@ -78,7 +85,6 @@ def main():
     monai.config.print_config()
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 
-    torch.cuda.set_device(cuda_device)
     print("\n#### GPU INFORMATION ###")
     print(f"Using device number: {torch.cuda.current_device()}, name: {torch.cuda.get_device_name()}")
     print(f"Device available: {torch.cuda.is_available()}\n")
@@ -109,14 +115,20 @@ def main():
     val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
     val_loader = DataLoader(val_ds,
                             batch_size=batch_size_inference,
-                            num_workers=num_workers,
-                            shuffle=False,
-                            collate_fn=None)
+                            num_workers=num_workers)
+
+    def prepare_batch(batchdata):
+        assert isinstance(batchdata, dict), "prepare_batch expects dictionary input data."
+        return (
+            (batchdata['img'], batchdata['seg'])
+            if 'seg' in batchdata
+            else (batchdata['img'], None)
+        )
 
     """
     Network preparation
     """
-    device = torch.cuda.current_device()
+    current_device = torch.device("cuda:0")
     # Create UNet, DiceLoss and Adam optimizer.
     net = monai.networks.nets.UNet(
         dimensions=2,
@@ -125,55 +137,59 @@ def main():
         channels=(16, 32, 64, 128, 256),
         strides=(2, 2, 2, 2),
         num_res_units=2,
-    ).to(device)
+    ).to(current_device)
 
     # define sliding window size and batch size for windows inference
     roi_size = (96, 96, 1)
 
-    def _sliding_window_processor(engine, batch):
-        net.eval()
-        with torch.no_grad():
-            # val_images, val_labels = batch['img'].to(device), batch['seg'].to(device)
-            val_images = batch['img'].to(device)
-            orig_size = list(val_images.shape)
-            resized_size = copy.deepcopy(orig_size)
-            resized_size[2] = 96
-            resized_size[3] = 96
-            val_images_resize = torch.nn.functional.interpolate(val_images, size=resized_size[2:], mode='trilinear')
-            val_outputs = sliding_window_inference(val_images_resize, roi_size, batch_size_inference, net)
-            val_outputs = (val_outputs.sigmoid() >= prob_thr).float()
-            val_outputs_resized = torch.nn.functional.interpolate(val_outputs, size=orig_size[2:], mode='nearest')
-            # add post-processing
-            val_outputs_resized = val_outputs_resized.detach().cpu().numpy()
-            # strt = ndimage.generate_binary_structure(3, 2)
-            # post = padded_binary_closing(np.squeeze(val_outputs_resized), strt)
-            # post = get_largest_component(post)
-            # val_outputs_resized = val_outputs_resized * post
-            # return val_outputs_resized, val_labels
-            return val_outputs_resized
+    """
+    Set ignite evaluator to perform inference
+    """
+    if nr_out_channels == 1:
+        do_sigmoid = True
+        do_softmax = False
+    elif nr_out_channels > 1:
+        do_sigmoid = False
+        do_softmax = True
+    else:
+        raise Exception("incompatible number of output channels")
+    print(f"Using sigmoid={do_sigmoid} and softmax={do_softmax} as final activation")
+    val_post_transforms = Compose(
+        [
+            Activationsd(keys="pred", sigmoid=do_sigmoid, softmax=do_softmax),
+        ]
+    )
+    val_handlers = [
+        StatsHandler(output_transform=lambda x: None),
+        CheckpointLoader(load_path=model_to_load, load_dict={"net": net}),
+        SegmentationSaver(
+            output_dir=out_dir, output_ext='.nii.gz', output_postfix=out_postfix,
+            batch_transform=lambda batch: batch["img_meta_dict"],
+            output_transform=lambda output: output["pred"],
+        ),
+    ]
 
-    evaluator = Engine(_sliding_window_processor)
+    evaluator = SupervisedEvaluator(
+        device=current_device,
+        val_data_loader=val_loader,
+        network=net,
+        prepare_batch=prepare_batch,
+        inferer=SlidingWindowInferer2DWithResize(roi_size=roi_size, sw_batch_size=4, overlap=0.0),
+        post_transform=val_post_transforms,
+        # key_val_metric={
+        #     "Mean_dice": MeanDice(include_background=True, output_transform=lambda x: (x["pred"], x["label"]))
+        # },
+        # additional_metrics={
+        #     "Loss": 1.0 - MeanDice(include_background=True, output_transform=lambda x: (x["pred"], x["label"]))
+        # },
+        val_handlers=val_handlers
+    )
 
-    # # add evaluation metric to the evaluator engine
-    # MeanDice(add_sigmoid=False, to_onehot_y=False).attach(evaluator, 'Mean_Dice')
-    #
-    # # StatsHandler prints loss at every iteration and print metrics at every epoch,
-    # # we don't need to print loss for evaluator, so just print metrics, user can also customize print functions
-    # val_stats_handler = StatsHandler(
-    #     name='evaluator',
-    #     output_transform=lambda x: None  # no need to print loss value, so disable per iteration output
-    # )
-    # val_stats_handler.attach(evaluator)
-
-    # convert the necessary metadata from batch data
-    SegmentationSaver(output_dir=out_dir, output_ext='.nii.gz', output_postfix=out_postfix, name='evaluator',
-                      batch_transform=lambda batch: {'filename_or_obj': batch['img.filename_or_obj'],
-                                                     'affine': batch['img.affine']},
-                      output_transform=lambda output: output).attach(evaluator)
-    # the model was trained by "unet_training_dict" example
-    CheckpointLoader(load_path=model_to_load, load_dict={'net': net}).attach(evaluator)
-
-    state = evaluator.run(val_loader)
+    """
+    Run inference
+    """
+    evaluator.run()
+    print("Done!")
 
 
 if __name__ == '__main__':
