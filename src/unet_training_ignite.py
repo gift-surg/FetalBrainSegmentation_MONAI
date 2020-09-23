@@ -51,9 +51,9 @@ from io_utils import create_data_list
 from sliding_window_inference import sliding_window_inference
 from custom_ignite_engines import create_supervised_trainer_with_clipping, create_evaluator_with_sliding_window
 from custom_unet import CustomUNet
-from custom_losses import DiceAndBinaryXentLoss, DiceLoss_noSmooth, TverskyLoss_noSmooth, DiceLossExtended
+from custom_losses import DiceAndBinaryXentLoss, TverskyLoss_noSmooth, DiceLossExtended
 from custom_metrics import MeanDiceAndBinaryXentMetric, BinaryXentMetric, TverskyMetric
-from custom_transform import ConverToOneHotd
+from custom_transform import ConverToOneHotd, MinimumPadd
 from custom_inferer import SlidingWindowInferer2D
 from custom_trainer import SupervisedTrainerClipping
 from custom_handlers import MyTensorBoardImageHandler
@@ -146,6 +146,8 @@ def main():
         seg_labels = [1]
     nr_out_channels = len(seg_labels)
     print("Considering the following {} labels in the segmentation: {}".format(nr_out_channels, seg_labels))
+    inplane_size = config_info["training"]["inplane_size"]
+    nnunet_preprocessing = config_info["training"]["nnunet_preprocessing"]
     loss_type = config_info['training']['loss_type']
     batch_size_train = config_info['training']['batch_size_train']
     batch_size_valid = config_info['training']['batch_size_valid']
@@ -233,19 +235,35 @@ def main():
     # - define 2D patches to be extracted
     # - add data augmentation (random rotation and random flip)
     # - squeeze to 2D
-    train_transforms = Compose([
-        LoadNiftid(keys=['img', 'seg']),
-        ConverToOneHotd(keys=['seg'], labels=seg_labels),
-        AddChanneld(keys=['img']),
-        NormalizeIntensityd(keys=['img']),
-        Resized(keys=['img', 'seg'], spatial_size=[96, 96, -1], mode=["trilinear", "nearest"]),
-        RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
-        RandRotated(keys=['img', 'seg'], range_x=90, range_y=90, prob=0.2, keep_size=True,
-                    mode=["bilinear", "nearest"]),
-        RandFlipd(keys=['img', 'seg'], spatial_axis=[0, 1]),
-        SqueezeDimd(keys=['img', 'seg'], dim=-1),
-        ToTensord(keys=['img', 'seg'])
-    ])
+    if nnunet_preprocessing:
+        train_transforms = Compose([
+            LoadNiftid(keys=['img', 'seg']),
+            ConverToOneHotd(keys=['seg'], labels=seg_labels),
+            AddChanneld(keys=['img']),
+            NormalizeIntensityd(keys=['img']),
+            MinimumPadd(keys=['img', 'seg'], k=inplane_size + [1]),
+            RandSpatialCropd(keys=['img', 'seg'], roi_size=inplane_size + [1], random_size=False),
+            RandRotated(keys=['img', 'seg'], range_x=90, range_y=90, prob=0.2, keep_size=True,
+                        mode=["bilinear", "nearest"]),
+            RandFlipd(keys=['img', 'seg'], spatial_axis=[0, 1]),
+            SqueezeDimd(keys=['img', 'seg'], dim=-1),
+            ToTensord(keys=['img', 'seg'])
+        ])
+    else:
+        train_transforms = Compose([
+            LoadNiftid(keys=['img', 'seg']),
+            ConverToOneHotd(keys=['seg'], labels=seg_labels),
+            AddChanneld(keys=['img']),
+            NormalizeIntensityd(keys=['img']),
+            Resized(keys=['img', 'seg'], spatial_size=inplane_size + [-1], mode=["trilinear", "nearest"]),
+            RandSpatialCropd(keys=['img', 'seg'], roi_size=inplane_size + [1], random_size=False),
+            RandRotated(keys=['img', 'seg'], range_x=90, range_y=90, prob=0.2, keep_size=True,
+                        mode=["bilinear", "nearest"]),
+            RandFlipd(keys=['img', 'seg'], spatial_axis=[0, 1]),
+            SqueezeDimd(keys=['img', 'seg'], dim=-1),
+            ToTensord(keys=['img', 'seg'])
+        ])
+
     # create a training data loader
     # train_ds = monai.data.Dataset(data=train_files, transform=train_transforms)
     # train_ds = monai.data.CacheDataset(data=train_files, transform=train_transforms, cache_rate=1.0,
@@ -255,36 +273,58 @@ def main():
                                          batch_size=batch_size_train,
                                          shuffle=True, num_workers=num_workers,
                                          pin_memory=torch.cuda.is_available())
-    # check_train_data = monai.utils.misc.first(train_loader)
-    # print("Training data tensor shapes")
-    # print(check_train_data['img'].shape, check_train_data['seg'].shape)
+    check_train_data = monai.utils.misc.first(train_loader)
+    print("Training data tensor shapes")
+    print(check_train_data['img'].shape, check_train_data['seg'].shape)
 
     # data preprocessing for validation:
     # - convert data to right format [batch, channel, dim, dim, dim]
     # - apply whitening
     # - resize to (96, 96) in-plane (preserve z-direction)
     if sliding_window_validation:
-        val_transforms = Compose([
-            LoadNiftid(keys=['img', 'seg']),
-            ConverToOneHotd(keys=['seg'], labels=seg_labels),
-            AddChanneld(keys=['img']),
-            NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img', 'seg'], spatial_size=[96, 96, -1], mode=["trilinear", "nearest"]),
-            ToTensord(keys=['img', 'seg'])
-        ])
+        if nnunet_preprocessing:
+            val_transforms = Compose([
+                LoadNiftid(keys=['img', 'seg']),
+                ConverToOneHotd(keys=['seg'], labels=seg_labels),
+                AddChanneld(keys=['img']),
+                NormalizeIntensityd(keys=['img']),
+                MinimumPadd(keys=['img', 'seg'], k=inplane_size + [1]),
+                ToTensord(keys=['img', 'seg'])
+            ])
+        else:
+            val_transforms = Compose([
+                LoadNiftid(keys=['img', 'seg']),
+                ConverToOneHotd(keys=['seg'], labels=seg_labels),
+                AddChanneld(keys=['img']),
+                NormalizeIntensityd(keys=['img']),
+                Resized(keys=['img', 'seg'], spatial_size=inplane_size + [-1], mode=["trilinear", "nearest"]),
+                ToTensord(keys=['img', 'seg'])
+            ])
         do_shuffle = False
     else:
         # - add extraction of 2D slices from validation set to emulate how loss is computed at training
-        val_transforms = Compose([
-            LoadNiftid(keys=['img', 'seg']),
-            ConverToOneHotd(keys=['seg'], labels=seg_labels),
-            AddChanneld(keys=['img']),
-            NormalizeIntensityd(keys=['img']),
-            Resized(keys=['img', 'seg'], spatial_size=[96, 96], mode=["trilinear", "nearest"]),
-            RandSpatialCropd(keys=['img', 'seg'], roi_size=[96, 96, 1], random_size=False),
-            SqueezeDimd(keys=['img', 'seg'], dim=-1),
-            ToTensord(keys=['img', 'seg'])
-        ])
+        if nnunet_preprocessing:
+            val_transforms = Compose([
+                LoadNiftid(keys=['img', 'seg']),
+                ConverToOneHotd(keys=['seg'], labels=seg_labels),
+                AddChanneld(keys=['img']),
+                NormalizeIntensityd(keys=['img']),
+                MinimumPadd(keys=['img', 'seg'], k=inplane_size + [1]),
+                RandSpatialCropd(keys=['img', 'seg'], roi_size=inplane_size + [1], random_size=False),
+                SqueezeDimd(keys=['img', 'seg'], dim=-1),
+                ToTensord(keys=['img', 'seg'])
+            ])
+        else:
+            val_transforms = Compose([
+                LoadNiftid(keys=['img', 'seg']),
+                ConverToOneHotd(keys=['seg'], labels=seg_labels),
+                AddChanneld(keys=['img']),
+                NormalizeIntensityd(keys=['img']),
+                Resized(keys=['img', 'seg'], spatial_size=inplane_size + [-1], mode=["trilinear", "nearest"]),
+                RandSpatialCropd(keys=['img', 'seg'], roi_size=inplane_size + [1], random_size=False),
+                SqueezeDimd(keys=['img', 'seg'], dim=-1),
+                ToTensord(keys=['img', 'seg'])
+            ])
         do_shuffle = True
     # create a validation data loader
     # val_ds = monai.data.Dataset(data=val_files, transform=val_transforms)
@@ -295,9 +335,9 @@ def main():
                                        batch_size=batch_size_valid,
                                        shuffle=do_shuffle,
                                        num_workers=num_workers)
-    # check_valid_data = monai.utils.misc.first(val_loader)
-    # print("Validation data tensor shapes")
-    # print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
+    check_valid_data = monai.utils.misc.first(val_loader)
+    print("Validation data tensor shapes")
+    print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
 
     """
     Network preparation
@@ -314,7 +354,7 @@ def main():
     ).to(current_device)
     # net = CustomUNet()
     print("Model summary:")
-    summary(net, input_data=(1, 96, 96))
+    summary(net, input_data=[1] + inplane_size)
 
     squared_pred = False
     if nr_out_channels == 1:
@@ -417,7 +457,7 @@ def main():
 
     if sliding_window_validation:
         print("3D evaluator is used")
-        inferer = SlidingWindowInferer2D(roi_size=[96, 96, 1], sw_batch_size=4, overlap=0.0)
+        inferer = SlidingWindowInferer2D(roi_size=inplane_size + [1], sw_batch_size=4, overlap=0.0)
     else:
         print("2D evaluator is used")
         inferer = SimpleInferer()
