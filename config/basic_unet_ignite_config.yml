@@ -13,13 +13,13 @@ device:
   num_workers: 4
 
 training:
-  seg_labels: [0, 1]
+  seg_labels: [1]
   inplane_size: [448, 512]
   nnunet_preprocessing: True
-  loss_type: "Dice_Xent"
+  loss_type: "Dice"
   batch_size_train: 14
   batch_size_valid: 1
-  nr_train_epochs: 20000
+  nr_train_epochs: 10000
   validation_every_n_epochs: 20
   sliding_window_validation: True
   optimiser_choice: "Adam"
@@ -43,10 +43,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.2.0_tests"
-  output_subfix: "monai0.2.0-MONAI_unet-Batch_Dice_Xent_two_channel_inplanecrop"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_noresize"
+  output_subfix: "monai0.2.0-MONAI_unet-MONAI_Dice_inplanecrop"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_noresize_single"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Replicating nnUNet behaviour in preprocessing: in-plane cropping to [448, 512] (zero-padding is added if needed) instead of resizing to fix size [96, 96]. Running with Batch Dice + xent, Two channels"
+  message: "Testing MONAI Dice (single channel) with nnUNet preprocessing: in-plane cropping to [448, 512] (zero-padding is added if needed) instead of resizing to fix size [96, 96]. Batch size 14"

@@ -377,11 +377,13 @@ def main():
     if loss_type == "Dice":
         smooth_num = 1e-5
         smooth_den = smooth_num
+        batch_version = False
         # loss_function = monai.losses.DiceLoss(sigmoid=do_sigmoid, softmax=do_softmax)
         loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
-                                         smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred)
-        print(f"[LOSS] Using DiceLossExtended with smooth = {smooth_num}, "
-              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
+                                         smooth_num=smooth_num, smooth_den=smooth_den,
+                                         squared_pred=squared_pred, batch_version=batch_version)
+        print(f"[LOSS] Using DiceLossExtended with smooth = {smooth_num}, do_sigmoid={do_sigmoid}, "
+              f"do_softmax={do_softmax}, squared_pred={squared_pred} and batch_version={batch_version}")
     elif loss_type == "Xent":
         loss_function = BCEWithLogitsLoss(reduction="mean")
         print("[LOSS] Using BCEWithLogitsLoss")
@@ -396,12 +398,14 @@ def main():
     elif loss_type == "Batch_Dice":
         smooth_num = 1e-5
         smooth_den = smooth_num
+        batch_version = True
         loss_function = DiceLossExtended(sigmoid=do_sigmoid, softmax=do_softmax,
                                          smooth_num=smooth_num, smooth_den=smooth_den, squared_pred=squared_pred,
-                                         batch_version=True)
+                                         batch_version=batch_version)
         print(f"[LOSS] Using DiceLossExtended - BATCH VERSION, "
               f"Dice with {smooth_num} at numerator and {smooth_den} at denominator, "
-              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}")
+              f"do_sigmoid={do_sigmoid}, do_softmax={do_softmax}, squared_pred={squared_pred}, "
+              f"batch_version={batch_version}")
     elif loss_type == "Tversky":
         loss_function = monai.losses.TverskyLoss(sigmoid=do_sigmoid, softmax=do_softmax)
         print(f"[LOSS] Using monai.losses.TverskyLoss with do_sigmoid={do_sigmoid}, do_softmax={do_softmax}")
