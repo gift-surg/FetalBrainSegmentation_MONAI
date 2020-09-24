@@ -41,7 +41,8 @@ from monai.networks.utils import predict_segmentation
 from monai.networks.nets import UNet
 
 from io_utils import create_data_list
-from custom_inferer import SlidingWindowInferer2DWithResize
+from custom_inferer import SlidingWindowInferer2DWithResize, SlidingWindowInferer2D
+from custom_transform import MinimumPadd
 
 sys.path.append("/mnt/data/mranzini/Code/Demic-v0.1")
 from Demic.util.image_process import *
@@ -66,6 +67,8 @@ def main():
     num_workers = config_info['device']['num_workers']
     # inference params
     nr_out_channels = config_info['inference']['nr_out_channels']
+    inplane_size = config_info["inference"]["inplane_size"]
+    nnunet_preprocessing = config_info["inference"]["nnunet_preprocessing"]
     batch_size_inference = config_info['inference']['batch_size_inference']
     # temporary check as sliding window inference does not accept higher batch size
     assert batch_size_inference == 1
@@ -139,9 +142,6 @@ def main():
         num_res_units=2,
     ).to(current_device)
 
-    # define sliding window size and batch size for windows inference
-    roi_size = (96, 96, 1)
-
     """
     Set ignite evaluator to perform inference
     """
@@ -169,12 +169,19 @@ def main():
         ),
     ]
 
+    roi_size = inplane_size + [1]
+    print("Using the following roi size for sliding window: {}".format(roi_size))
+    if nnunet_preprocessing:
+        inferer = SlidingWindowInferer2D(roi_size=roi_size, sw_batch_size=4, overlap=0.0)
+    else:
+        inferer = SlidingWindowInferer2DWithResize(roi_size=roi_size, sw_batch_size=4, overlap=0.0)
+
     evaluator = SupervisedEvaluator(
         device=current_device,
         val_data_loader=val_loader,
         network=net,
         prepare_batch=prepare_batch,
-        inferer=SlidingWindowInferer2DWithResize(roi_size=roi_size, sw_batch_size=4, overlap=0.0),
+        inferer=inferer,
         post_transform=val_post_transforms,
         # key_val_metric={
         #     "Mean_dice": MeanDice(include_background=True, output_transform=lambda x: (x["pred"], x["label"]))
