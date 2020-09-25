@@ -62,10 +62,10 @@ def create_data_list(data_folder_list, subject_list, img_postfix='_Image', label
                 label_filename = search_file_in_folder_list(data_folder_list, label_basename)
                 if os.path.isfile(image_filename):
                     if is_inference:
-                        full_list.append({'img': image_filename})
+                        full_list.append({"image": image_filename})
                     else:
                         if os.path.isfile(label_filename):
-                            full_list.append({'img': image_filename, 'seg': label_filename})
+                            full_list.append({"image": image_filename, "label": label_filename})
                         else:
                             raise IOError('Expected label file: {} not found'.format(label_filename))
                 else:
