@@ -14,13 +14,13 @@ import sys
 from typing import Callable, Optional, Union
 
 import torch
-import torch.nn.functional as F
-from torch.nn.modules.loss import _Loss, BCEWithLogitsLoss, BCELoss, CrossEntropyLoss
+import torch.nn as nn
+from torch.nn.modules.loss import _Loss, BCEWithLogitsLoss, BCELoss
 
 # sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
-import monai
 from monai.networks.utils import one_hot
 from monai.utils import LossReduction, Weight
+from monai.losses.dice import DiceLoss
 
 
 class DiceLossExtended(_Loss):
@@ -368,3 +368,28 @@ class TverskyLoss_noSmooth(_Loss):
             return score.mean()
         raise ValueError(f"reduction={self.reduction} is invalid.")
 
+
+# CUSTOM LOSSES FROM dynUNet tutorial for dynUNet training
+# code from https://github.com/Project-MONAI/tutorials/blob/master/modules/dynunet_tutorial.ipynb
+class CrossEntropyLoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.loss = nn.CrossEntropyLoss()
+
+    def forward(self, y_pred, y_true):
+        # CrossEntropyLoss target needs to have shape (B, D, H, W)
+        # Target from pipeline has shape (B, 1, D, H, W)
+        y_true = torch.squeeze(y_true, dim=1).long()
+        return self.loss(y_pred, y_true)
+
+
+class DiceCELoss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.dice = DiceLoss(to_onehot_y=True, softmax=True)
+        self.cross_entropy = CrossEntropyLoss()
+
+    def forward(self, y_pred, y_true):
+        dice = self.dice(y_pred, y_true)
+        cross_entropy = self.cross_entropy(y_pred, y_true)
+        return dice + cross_entropy

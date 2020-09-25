@@ -15,6 +15,7 @@ device:
 training:
   seg_labels: [1]
   inplane_size: [448, 512]
+  spacing: [0.8, 0.8, 3.0]
   nnunet_preprocessing: True
   loss_type: "Dice"
   batch_size_train: 14
