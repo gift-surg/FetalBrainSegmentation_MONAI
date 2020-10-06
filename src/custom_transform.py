@@ -10,15 +10,29 @@
 # limitations under the License.
 
 import numpy as np
+import copy
 import torch
 from typing import Any, Callable, Dict, Hashable, List, Mapping, Optional, Sequence, Tuple, Union
 
 from monai.transforms.compose import MapTransform
 
 from monai.config import IndexSelection, KeysCollection
-from monai.utils import NumpyPadMode, ensure_tuple, ensure_tuple_rep, fall_back_tuple
-from monai.transforms import DivisiblePad, SpatialCrop, BorderPad
+from monai.transforms import (
+    DivisiblePad, SpatialCrop, BorderPad, MapTransform, Spacing, Spacingd
+)
+from monai.utils import (
+    NumpyPadMode,
+    GridSampleMode,
+    GridSamplePadMode,
+    InterpolateMode,
+    ensure_tuple,
+    ensure_tuple_rep,
+    fall_back_tuple,
+)
 NumpyPadModeSequence = Union[Sequence[Union[NumpyPadMode, str]], NumpyPadMode, str]
+GridSampleModeSequence = Union[Sequence[Union[GridSampleMode, str]], GridSampleMode, str]
+GridSamplePadModeSequence = Union[Sequence[Union[GridSamplePadMode, str]], GridSamplePadMode, str]
+InterpolateModeSequence = Union[Sequence[Union[InterpolateMode, str]], InterpolateMode, str]
 
 
 class ConverToOneHotd(MapTransform):
@@ -79,4 +93,64 @@ class MinimumPadd(MapTransform):
             k = np.array(fall_back_tuple(self.k, (1,) * len(spatial_shape)))
             if np.any(spatial_shape < k):
                 d[key] = self.padder(d[key], mode=m)
+        return d
+
+
+class InPlaneSpacingd(Spacingd):
+    """
+    Performs the same operation as the Spacingd transform, but allows to preserve the spacing along some axes,
+    which should be indicated as -1.0 in the input pixdim.
+    E.g. pixdim=(0.8, 0.8, -1.0) would change the x-y plane spacing to (0.8, 0.8) while preserving the original
+    spacing along z.
+    """
+    def __init__(self,
+                 keys: KeysCollection,
+                 pixdim: Sequence[float],
+                 diagonal: bool = False,
+                 mode: GridSampleModeSequence = GridSampleMode.BILINEAR,
+                 padding_mode: GridSamplePadModeSequence = GridSamplePadMode.BORDER,
+                 align_corners: Union[Sequence[bool], bool] = False,
+                 dtype: Optional[Union[Sequence[np.dtype], np.dtype]] = np.float64,
+                 meta_key_postfix: str = "meta_dict",
+                 ) -> None:
+        super().__init__(keys,
+                         pixdim,
+                         diagonal,
+                         mode,
+                         padding_mode,
+                         align_corners,
+                         dtype,
+                         meta_key_postfix)
+        self.pixdim = np.array(ensure_tuple(pixdim), dtype=np.float64)
+        self.diagonal = diagonal
+        self.dim_to_keep = np.argwhere(self.pixdim == -1.0)
+
+    def __call__(self,
+                 data: Mapping[Union[Hashable, str], Dict[str, np.ndarray]]
+                 ) -> Dict[Union[Hashable, str], Union[np.ndarray, Dict[str, np.ndarray]]]:
+        d = dict(data)
+        for idx, key in enumerate(self.keys):
+            meta_data = d[f"{key}_{self.meta_key_postfix}"]
+            # set pixdim to original pixdim value where required
+            current_pixdim = copy.deepcopy(self.pixdim)
+            original_pixdim = meta_data["pixdim"]
+            old_pixdim = original_pixdim[1:4]
+            current_pixdim[self.dim_to_keep] = old_pixdim[self.dim_to_keep]
+
+            # apply the transform
+            spacing_transform = Spacing(current_pixdim, diagonal=self.diagonal)
+
+            # resample array of each corresponding key
+            # using affine fetched from d[affine_key]
+            d[key], _, new_affine = spacing_transform(
+                data_array=d[key],
+                affine=meta_data["affine"],
+                mode=self.mode[idx],
+                padding_mode=self.padding_mode[idx],
+                align_corners=self.align_corners[idx],
+                dtype=self.dtype[idx],
+            )
+
+            # store the modified affine
+            meta_data["affine"] = new_affine
         return d

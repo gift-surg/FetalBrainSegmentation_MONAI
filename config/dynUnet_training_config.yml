@@ -13,21 +13,22 @@ device:
   num_workers: 4
 
 training:
-  seg_labels: [1]
+  seg_labels: [0, 1]
   inplane_size: [448, 512]
-  nnunet_preprocessing: True
-  loss_type: "Dice"
+  spacing: [0.8, 0.8, -1.0]
+  loss_type: "dynDiceCELoss"
   batch_size_train: 14
   batch_size_valid: 1
-  nr_train_epochs: 10000
+  nr_train_epochs: 5000
   validation_every_n_epochs: 20
   sliding_window_validation: True
-  optimiser_choice: "Adam"
-  opt_momentum: null
-  gradient_clipping: null
-  lr: 1e-3
-  lr_decay: null
+  optimiser_choice: "Adam"    # currently not in use (using default as in nnUNet SGD + Momentum)
+  opt_momentum: null          # currently not in use
+  gradient_clipping: null     # currently not in use
+  lr: 2.5118864315093307e-06
+  lr_decay: null              # currently not in use (there is a custom lr scheduler)
   manual_seed: 0
+  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-09-30_16-39-21_monai0.3.0-MONAI_dynUNet_inplanespacing/checkpoint_final_iteration=230000.pth"
 
 data:
   data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
@@ -42,11 +43,11 @@ data:
                     "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_validation_p_files.txt"]
 
 output:
-  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.2.0_tests"
-  output_subfix: "monai0.2.0-MONAI_unet-MONAI_Dice_inplanecrop"
-  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_noresize_single"
+  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests"
+  output_subfix: "monai0.3.0-MONAI_dynUNet_inplanespacing_continue"
+  cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_dynUnet"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Testing MONAI Dice (single channel) with nnUNet preprocessing: in-plane cropping to [448, 512] (zero-padding is added if needed) instead of resizing to fix size [96, 96]. Batch size 14"
+  message: "[Continue training] Testing MONAI implementation of dynUNet - Initial test with all default parameters as in the dynUnet tutorial - but using custom spacing to avoid resampling along z"

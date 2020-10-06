@@ -15,7 +15,7 @@ import os
 import sys
 import logging
 import yaml
-import datetime
+from datetime import datetime
 import argparse
 from pathlib import Path
 
@@ -70,7 +70,7 @@ from monai.handlers import (
 from monai.inferers import SlidingWindowInferer, SimpleInferer
 
 from io_utils import create_data_list
-from custom_transform import ConverToOneHotd
+from custom_transform import ConverToOneHotd, InPlaneSpacingd
 from custom_losses import DiceCELoss, DiceLossExtended, DiceAndBinaryXentLoss
 from custom_inferer import SlidingWindowInferer2D
 
@@ -121,6 +121,10 @@ def main():
     else:
         model_to_load = None
 
+    print("\n#### GPU INFORMATION ###")
+    print(f"Using device number: {torch.cuda.current_device()}, name: {torch.cuda.get_device_name()}")
+    print(f"Device available: {torch.cuda.is_available()}\n")
+
     """
     Setup data directory
     """
@@ -160,26 +164,31 @@ def main():
     train_transforms = Compose(
         [
             LoadNiftid(keys=["image", "label"]),
-            ConverToOneHotd(keys=["label"], labels=seg_labels),
+            # ConverToOneHotd(keys=["label"], labels=seg_labels),
             AddChanneld(keys=["image", "label"]),
             CropForegroundd(keys=["image", "label"], source_key="image"),
-            Spacingd(
+            InPlaneSpacingd(
                 keys=["image", "label"],
                 pixdim=spacing,
                 mode=("bilinear", "nearest"),
             ),
-            SpatialPadd(keys=["image", "label"], spatial_size=patch_size),
+            SpatialPadd(keys=["image", "label"], spatial_size=patch_size,
+                        mode=["constant", "edge"]),
             NormalizeIntensityd(keys=["image"], nonzero=False, channel_wise=True),
             RandSpatialCropd(keys=["image", "label"], roi_size=patch_size, random_size=False),
+            SqueezeDimd(keys=["image", "label"], dim=-1),
             RandZoomd(
                 keys=["image", "label"],
                 min_zoom=0.9,
                 max_zoom=1.2,
-                mode=("trilinear", "nearest"),
+                mode=("bilinear", "nearest"),
                 align_corners=(True, None),
                 prob=0.16,
             ),
-            CastToTyped(keys=["image", "label"], dtype=(np.float32, np.uint8)),
+            RandRotated(keys=["image", "label"], range_x=90, range_y=90, prob=0.2,
+                        keep_size=True, mode=["bilinear", "nearest"],
+                        padding_mode=["zeros", "border"]),
+            # CastToTyped(keys=["image", "label"], dtype=(np.float32, np.uint8)),
             RandGaussianNoised(keys=["image"], std=0.01, prob=0.15),
             RandGaussianSmoothd(
                 keys=["image"],
@@ -189,10 +198,7 @@ def main():
                 prob=0.15,
             ),
             RandScaleIntensityd(keys=["image"], factors=0.3, prob=0.15),
-            RandRotated(keys=["image", "label"], range_x=90, range_y=90, prob=0.2,
-                        keep_size=True, mode=["trilinear", "nearest"]),
             RandFlipd(["image", "label"], spatial_axis=[0, 1], prob=0.5),
-            SqueezeDimd(keys=["image", "label"], dim=-1),
             ToTensord(keys=["image", "label"]),
         ]
     )
@@ -200,17 +206,17 @@ def main():
     val_transforms = Compose(
         [
             LoadNiftid(keys=["image", "label"]),
-            ConverToOneHotd(keys=["label"], labels=seg_labels),
+            # ConverToOneHotd(keys=["label"], labels=seg_labels),
             AddChanneld(keys=["image", "label"]),
             CropForegroundd(keys=["image", "label"], source_key="image"),
-            Spacingd(
+            InPlaneSpacingd(
                 keys=["image", "label"],
                 pixdim=spacing,
                 mode=("bilinear", "nearest"),
             ),
-            SpatialPadd(keys=["image", "label"], spatial_size=patch_size),
+            SpatialPadd(keys=["image", "label"], spatial_size=patch_size, mode=["constant", "edge"]),
             NormalizeIntensityd(keys=["image"], nonzero=False, channel_wise=True),
-            CastToTyped(keys=["image", "label"], dtype=(np.float32, np.uint8)),
+            # CastToTyped(keys=["image", "label"], dtype=(np.float32, np.uint8)),
             ToTensord(keys=["image", "label"]),
         ]
     )
@@ -226,7 +232,7 @@ def main():
                               num_workers=config_info['device']['num_workers'])
     check_train_data = misc.first(train_loader)
     print("Training data tensor shapes")
-    print(check_train_data['img'].shape, check_train_data['seg'].shape)
+    print(check_train_data["image"].shape, check_train_data["label"].shape)
 
     if config_info['training']['batch_size_valid'] != 1:
         raise Exception("Batch size different from 1 at validation ar currently not supported")
@@ -237,7 +243,7 @@ def main():
                             num_workers=config_info['device']['num_workers'])
     check_valid_data = misc.first(val_loader)
     print("Validation data tensor shapes")
-    print(check_valid_data['img'].shape, check_valid_data['seg'].shape)
+    print(check_valid_data["image"].shape, check_valid_data["label"].shape)
 
     """
     Network preparation and training initialization
@@ -306,6 +312,7 @@ def main():
         deep_supr_num=2,
         res_block=False,
     ).to(current_device)
+    print(net)
 
     opt = torch.optim.SGD(net.parameters(), lr=float(config_info['training']['lr']), momentum=0.95)
     scheduler = torch.optim.lr_scheduler.LambdaLR(
@@ -315,21 +322,22 @@ def main():
     """
     MONAI evaluator
     """
-    val_post_transforms = Compose(
-        [
-            Activationsd(keys="pred", sigmoid=True),
-        ]
-    )
+    # val_post_transforms = Compose(
+    #     [
+    #         Activationsd(keys="pred", sigmoid=True),
+    #     ]
+    # )
     val_handlers = [
         StatsHandler(output_transform=lambda x: None),
         TensorBoardStatsHandler(log_dir=os.path.join(out_model_dir, "valid"),
                                 output_transform=lambda x: None,
                                 global_epoch_transform=lambda x: trainer.state.iteration),
-        CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net}, save_key_metric=True),
+        CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net, "opt": opt}, save_key_metric=True,
+                        file_prefix='best_valid'),
     ]
     if config_info['output']['val_image_to_tensorboad']:
         val_handlers.append(TensorBoardImageHandler(log_dir=os.path.join(out_model_dir, "valid"),
-                                                    batch_transform=lambda x: (x["img"], x["seg"]),
+                                                    batch_transform=lambda x: (x["image"], x["label"]),
                                                     output_transform=lambda x: x["pred"], interval=2))
 
     # Define customized evaluator
@@ -359,7 +367,7 @@ def main():
         val_data_loader=val_loader,
         network=net,
         inferer=SlidingWindowInferer2D(roi_size=patch_size, sw_batch_size=4, overlap=0.0),
-        post_transform=val_post_transforms,  # NOTE: IN dynUNet this was set to None!
+        post_transform=None,  # NOTE: IN dynUNet this was set to None!
         key_val_metric={
             "Mean_dice": MeanDice(
                 include_background=False,
@@ -369,17 +377,17 @@ def main():
             )
         },
         val_handlers=val_handlers,
-        amp=True,
+        amp=False,
     )
 
     """
     MONAI trainer
     """
-    train_post_transforms = Compose(
-        [
-            Activationsd(keys="pred", sigmoid=True),
-        ]
-    )
+    # train_post_transforms = Compose(
+    #     [
+    #         Activationsd(keys="pred", sigmoid=True),
+    #     ]
+    # )
 
     validation_every_n_epochs = config_info['training']['validation_every_n_epochs']
     epoch_len = len(train_ds) // train_loader.batch_size
@@ -395,7 +403,8 @@ def main():
                                 output_transform=lambda x: x["loss"],
                                 global_epoch_transform=lambda x: trainer.state.iteration),
         CheckpointSaver(save_dir=out_model_dir, save_dict={"net": net, "opt": opt},
-                        save_final=True, save_key_metric=True, key_metric_name='Mean_dice', key_metric_n_saved=1,
+                        save_final=True,
+                        # save_key_metric=True, key_metric_name='Mean_dice', key_metric_n_saved=1,
                         save_interval=2, epoch_level=True,
                         n_saved=config_info['output']['max_nr_models_saved']),
     ]
@@ -436,17 +445,18 @@ def main():
         optimizer=opt,
         loss_function=loss_function,
         inferer=SimpleInferer(),
-        post_transform=train_post_transforms,
-        key_train_metric={
-            "Mean_dice": MeanDice(
-                include_background=False,
-                to_onehot_y=True,
-                mutually_exclusive=True,
-                output_transform=lambda x: (x["pred"], x["label"]),
-            )
-        },
+        post_transform=None,
+        key_train_metric=None,
+        # key_train_metric={
+        #     "Mean_dice": MeanDice(
+        #         include_background=False,
+        #         to_onehot_y=True,
+        #         mutually_exclusive=True,
+        #         output_transform=lambda x: (x["pred"], x["label"]),
+        #     )
+        # },
         train_handlers=train_handlers,
-        amp=True,
+        amp=False,
     )
 
     """
