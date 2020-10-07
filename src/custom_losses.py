@@ -384,9 +384,12 @@ class CrossEntropyLoss(nn.Module):
 
 
 class DiceCELoss(nn.Module):
-    def __init__(self):
+    def __init__(self,
+                 to_onehot_y=True,
+                 softmax=True,
+                 batch_version=False):
         super().__init__()
-        self.dice = DiceLoss(to_onehot_y=True, softmax=True)
+        self.dice = DiceLossExtended(to_onehot_y=to_onehot_y, softmax=softmax, batch_version=batch_version)
         self.cross_entropy = CrossEntropyLoss()
 
     def forward(self, y_pred, y_true):

@@ -258,7 +258,13 @@ def main():
     current_device = torch.device("cuda:0")
     loss_type = config_info['training']['loss_type']
     if loss_type == "dynDiceCELoss":
+        batch_version = False
         loss_function = DiceCELoss()
+        print(f"[LOSS] Using DiceCELoss with batch_version={batch_version}")
+    elif loss_type == "dynDiceCELoss_batch":
+        batch_version = True
+        loss_function = DiceCELoss(batch_version=batch_version)
+        print(f"[LOSS] Using DiceCELoss with batch_version={batch_version}")
     elif loss_type == "Batch_Dice":
         smooth_num = 1e-5
         smooth_den = smooth_num
