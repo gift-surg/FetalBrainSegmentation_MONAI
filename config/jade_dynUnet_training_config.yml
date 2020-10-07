@@ -1,0 +1,52 @@
+# Copyright 2020 Marta Bianca Maria Ranzini and contributors
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+device:
+  num_workers: 4
+
+training:
+  seg_labels: [0, 1]
+  inplane_size: [448, 512]
+  spacing: [0.8, 0.8, -1.0]
+  loss_type: "dynDiceCELoss_batch"
+  batch_size_train: 14
+  batch_size_valid: 1
+  nr_train_epochs: 20000
+  validation_every_n_epochs: 20
+  sliding_window_validation: True
+  optimiser_choice: "Adam"    # currently not in use (using default as in nnUNet SGD + Momentum)
+  opt_momentum: null          # currently not in use
+  gradient_clipping: null     # currently not in use
+  lr: 1e-2
+  lr_decay: null              # currently not in use (there is a custom lr scheduler)
+  manual_seed: 0
+
+data:
+  data_root: ["/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/NeuroImage_dataset/GroupA",
+              "/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/NeuroImage_dataset/GroupB1",
+              "/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/NeuroImage_dataset/GroupB2",
+              "/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/NeuroImage_dataset_extension/GroupC",
+              "/jmain01/home/JAD014/mxm01/mbr31-mxm01//Data/NeuroImage_dataset_extension/GroupE",
+              "/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/NeuroImage_dataset_extension/GroupD",
+              "/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/NeuroImage_dataset_extension/GroupF"]
+  training_list: "/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/data_splitting/list_train_files.txt"
+  validation_list: ["/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/data_splitting/list_validation_h_files.txt",
+                    "/jmain01/home/JAD014/mxm01/mbr31-mxm01/Data/data_splitting/list_validation_p_files.txt"]
+
+output:
+  out_model_dir: "/jmain01/home/JAD014/mxm01/mbr31-mxm01/tests_deterministic_seeds/monai0.3.0_tests"
+  output_subfix: "monai0.3.0-MONAI_dynUNet_inplanespacing_batchDice"
+  cache_dir: "/jmain01/home/JAD014/mxm01/mbr31-mxm01/tests_deterministic_seeds/persistent_cache_3Dval_dynUnet"
+  max_nr_models_saved: 1
+  val_image_to_tensorboad: False
+
+log:
+  message: "Testing MONAI implementation of dynUNet - using batch dice + xent and custom spacing transform to avoid resampling along z"
