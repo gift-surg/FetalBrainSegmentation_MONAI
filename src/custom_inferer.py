@@ -13,7 +13,6 @@ import copy
 import torch
 from typing import Union
 
-import monai
 from monai.inferers.utils import sliding_window_inference
 from monai.inferers import Inferer
 from monai.utils import BlendMode

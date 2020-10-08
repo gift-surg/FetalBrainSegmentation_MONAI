@@ -11,10 +11,7 @@
 
 import numpy as np
 import copy
-import torch
 from typing import Any, Callable, Dict, Hashable, List, Mapping, Optional, Sequence, Tuple, Union
-
-from monai.transforms.compose import MapTransform
 
 from monai.config import IndexSelection, KeysCollection
 from monai.transforms import (

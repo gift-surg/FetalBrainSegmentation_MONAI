@@ -18,13 +18,10 @@ import yaml
 import argparse
 from pathlib import Path
 
-import nibabel as nib
-import numpy as np
 import torch
 from torchsummary import summary
 from torch.utils.tensorboard import SummaryWriter
 from torch.nn.modules.loss import BCEWithLogitsLoss
-from ignite.metrics import Accuracy
 from ignite.engine import Events
 
 import monai

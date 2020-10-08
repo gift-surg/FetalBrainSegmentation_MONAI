@@ -17,7 +17,6 @@ from monai.inferers import SimpleInferer
 from monai.utils import exact_version, optional_import
 from monai.engines.utils import CommonKeys as Keys
 from monai.engines.utils import default_prepare_batch
-from monai.engines.workflow import Workflow
 from monai.engines.trainer import Trainer
 
 Engine, _ = optional_import("ignite.engine", "0.3.0", exact_version, "Engine")

@@ -16,7 +16,6 @@ import argparse
 import logging
 import torch
 
-from torch.nn.functional import interpolate
 from torch.utils.data import DataLoader
 
 from monai.config import print_config

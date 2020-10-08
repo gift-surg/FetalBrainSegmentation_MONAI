@@ -19,19 +19,14 @@ from datetime import datetime
 import argparse
 from pathlib import Path
 
-import ignite
-import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
 from torch.nn.functional import interpolate
 
 from torch.utils.tensorboard import SummaryWriter
-import numpy as np
 from monai.config import print_config
 from monai.data import DataLoader, PersistentDataset
 from monai.utils import misc
 from monai.engines import SupervisedTrainer
-from monai.losses import DiceLoss
 from monai.networks.nets import DynUNet
 from monai.transforms import (
     Compose,

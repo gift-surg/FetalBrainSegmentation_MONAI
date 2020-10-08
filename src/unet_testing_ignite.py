@@ -13,13 +13,8 @@ import os
 import sys
 import yaml
 import argparse
-import copy
-from glob import glob
 import logging
-import nibabel as nib
-import numpy as np
 import torch
-from ignite.engine import Engine
 from torch.utils.data import DataLoader
 
 # sys.path.append("/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/MONAI")
