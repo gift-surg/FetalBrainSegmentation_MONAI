@@ -50,6 +50,7 @@ class DiceLossExtended(_Loss):
         softmax: bool = False,
         other_act: Optional[Callable] = None,
         squared_pred: bool = False,
+        pow: float = 1.,
         jaccard: bool = False,
         reduction: Union[LossReduction, str] = LossReduction.MEAN,
         batch_version: bool = False,
@@ -66,6 +67,7 @@ class DiceLossExtended(_Loss):
                 other activation layers, Defaults to ``None``. for example:
                 `other_act = torch.tanh`.
             squared_pred: use squared versions of targets and predictions in the denominator or not.
+            pow: raise the Dice to the required power (default 1)
             jaccard: compute Jaccard Index (soft IoU) instead of dice or not.
             reduction: {``"none"``, ``"mean"``, ``"sum"``}
                 Specifies the reduction to apply to the output. Defaults to ``"mean"``.
@@ -92,6 +94,7 @@ class DiceLossExtended(_Loss):
         self.softmax = softmax
         self.other_act = other_act
         self.squared_pred = squared_pred
+        self.pow = pow
         self.jaccard = jaccard
         self.batch_version = batch_version
         self.smooth_num = smooth_num
@@ -156,7 +159,7 @@ class DiceLossExtended(_Loss):
         if self.jaccard:
             denominator = 2.0 * (denominator - intersection)
 
-        f: torch.Tensor = 1.0 - (2.0 * intersection + self.smooth_num) / (denominator + self.smooth_den)
+        f: torch.Tensor = (1.0 - (2.0 * intersection + self.smooth_num) / (denominator + self.smooth_den)) ** self.pow
 
         if self.reduction == LossReduction.MEAN.value:
             f = torch.mean(f)  # the batch and channel average
@@ -386,9 +389,10 @@ class DiceCELoss(nn.Module):
     def __init__(self,
                  to_onehot_y=True,
                  softmax=True,
-                 batch_version=False):
+                 batch_version=False,
+                 pow=1.0):
         super().__init__()
-        self.dice = DiceLossExtended(to_onehot_y=to_onehot_y, softmax=softmax, batch_version=batch_version)
+        self.dice = DiceLossExtended(to_onehot_y=to_onehot_y, softmax=softmax, batch_version=batch_version, pow=pow)
         self.cross_entropy = CrossEntropyLoss()
 
     def forward(self, y_pred, y_true):
