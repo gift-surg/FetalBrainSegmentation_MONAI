@@ -32,6 +32,8 @@ from monai.transforms import (
     NormalizeIntensityd,
     ToTensord,
     Activationsd,
+    AsDiscreted,
+    KeepLargestConnectedComponentd
 )
 
 from io_utils import create_data_list
@@ -180,6 +182,8 @@ def main():
     val_post_transforms = Compose(
         [
             Activationsd(keys="pred", sigmoid=do_sigmoid, softmax=do_softmax),
+            AsDiscreted(keys="pred", argmax=True, threshold_values=True, logit_thresh=prob_thr),
+            KeepLargestConnectedComponentd(keys="pred", applied_labels=1)
         ]
     )
     val_handlers = [
