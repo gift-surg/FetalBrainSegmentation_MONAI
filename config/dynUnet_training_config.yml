@@ -17,18 +17,19 @@ training:
   inplane_size: [448, 512]
   spacing: [0.8, 0.8, -1.0]
   loss_type: "dynDiceCELoss"
+  pow_dice: 2
   batch_size_train: 14
   batch_size_valid: 1
-  nr_train_epochs: 5000
+  nr_train_epochs: 12000
   validation_every_n_epochs: 20
   sliding_window_validation: True
   optimiser_choice: "Adam"    # currently not in use (using default as in nnUNet SGD + Momentum)
   opt_momentum: null          # currently not in use
   gradient_clipping: null     # currently not in use
-  lr: 1e-3
+  lr: 1e-2
   lr_decay: null              # currently not in use (there is a custom lr scheduler)
   manual_seed: 0
-  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-09-30_16-39-21_monai0.3.0-MONAI_dynUNet_inplanespacing/checkpoint_final_iteration=230000.pth"
+#  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-10-09_11-31-03_monai0.3.0-MONAI_dynUNet_batch_Dice/checkpoint_epoch=7364.pth"
 
 data:
   data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
@@ -44,10 +45,10 @@ data:
 
 output:
   out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests"
-  output_subfix: "monai0.3.0-MONAI_dynUNet_inplanespacing_continue"
+  output_subfix: "monai0.3.0-MONAI_dynUNet_Diceto2_valpercentage"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_dynUnet"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "[Continue training] Testing MONAI implementation of dynUNet, reset LR=1e-3 - Initial test with all default parameters as in the dynUnet tutorial - but using custom spacing to avoid resampling along z"
+  message: "Running dynUNet training with Dice^2 + Xent as loss, but using the percentage of slices with Dice > 0.9 as validation metric"

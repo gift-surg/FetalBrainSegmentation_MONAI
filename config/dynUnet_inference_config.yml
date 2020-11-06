@@ -18,7 +18,7 @@ inference:
   spacing: [0.8, 0.8, -1.0]
   batch_size_inference: 1
   probability_threshold: 0.5
-  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-09-30_16-39-21_monai0.3.0-MONAI_dynUNet_inplanespacing/best_valid_checkpoint_key_metric=0.9444.pth"
+  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-10-08_09-47-58_monai0.3.0-MONAI_dynUNet_inplanespacing_continue/best_valid_checkpoint_key_metric=0.9458.pth"
 
 data:
   data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
@@ -39,5 +39,5 @@ data:
 #                   "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_validation_p_files.txt"]
 
 output:
-  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-09-30_16-39-21_monai0.3.0-MONAI_dynUNet_inplanespacing/inference_valid_key_metric=0.9444"
+  out_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-10-08_09-47-58_monai0.3.0-MONAI_dynUNet_inplanespacing_continue/inference_valid_postproc_key_metric=0.9458"
   out_postfix: "seg"
