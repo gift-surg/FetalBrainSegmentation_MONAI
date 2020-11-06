@@ -68,6 +68,7 @@ from io_utils import create_data_list
 from custom_transform import ConverToOneHotd, InPlaneSpacingd
 from custom_losses import DiceCELoss, DiceLossExtended, DiceAndBinaryXentLoss
 from custom_inferer import SlidingWindowInferer2D
+from custom_metrics import PercentageSliceDice
 
 
 def main():
@@ -250,16 +251,20 @@ def main():
         do_sigmoid = True
         do_softmax = False
 
+    pow = 1.0
+    if 'pow_dice' in config_info['training']:
+        pow = config_info['training']['pow_dice']
+
     current_device = torch.device("cuda:0")
     loss_type = config_info['training']['loss_type']
     if loss_type == "dynDiceCELoss":
         batch_version = False
-        loss_function = DiceCELoss()
-        print(f"[LOSS] Using DiceCELoss with batch_version={batch_version}")
+        loss_function = DiceCELoss(pow=pow)
+        print(f"[LOSS] Using DiceCELoss with batch_version={batch_version} and Dice^{pow}")
     elif loss_type == "dynDiceCELoss_batch":
         batch_version = True
-        loss_function = DiceCELoss(batch_version=batch_version)
-        print(f"[LOSS] Using DiceCELoss with batch_version={batch_version}")
+        loss_function = DiceCELoss(batch_version=batch_version, pow=pow)
+        print(f"[LOSS] Using DiceCELoss with batch_version={batch_version} and Dice^{pow}")
     elif loss_type == "Batch_Dice":
         smooth_num = 1e-5
         smooth_den = smooth_num
@@ -370,12 +375,14 @@ def main():
         inferer=SlidingWindowInferer2D(roi_size=patch_size, sw_batch_size=4, overlap=0.0),
         post_transform=None,  # NOTE: IN dynUNet this was set to None!
         key_val_metric={
-            "Mean_dice": MeanDice(
-                include_background=False,
-                to_onehot_y=True,
-                mutually_exclusive=True,
-                output_transform=lambda x: (x["pred"], x["label"]),
-            )
+            # "Mean_dice": MeanDice(
+            #     include_background=False,
+            #     to_onehot_y=True,
+            #     mutually_exclusive=True,
+            #     output_transform=lambda x: (x["pred"], x["label"]),
+            # )
+            "Percentage_slice": PercentageSliceDice(output_transform=lambda x: (x["pred"], x["label"]))
+
         },
         val_handlers=val_handlers,
         amp=False,
@@ -395,6 +402,7 @@ def main():
     validation_every_n_iters = validation_every_n_epochs * epoch_len
 
     writer_train = SummaryWriter(log_dir=os.path.join(out_model_dir, "train"))
+    #TODO: find way to add the learning rate schedule saving and reloading
     train_handlers = [
         LrScheduleHandler(lr_scheduler=scheduler, print_lr=True),
         ValidationHandler(validator=evaluator, interval=validation_every_n_iters, epoch_level=False),
