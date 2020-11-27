@@ -25,7 +25,7 @@ from torch.nn.functional import interpolate
 from torch.utils.tensorboard import SummaryWriter
 from monai.config import print_config
 from monai.data import DataLoader, PersistentDataset
-from monai.utils import misc
+from monai.utils import misc, set_determinism
 from monai.engines import SupervisedTrainer
 from monai.networks.nets import DynUNet
 from monai.transforms import (
@@ -117,9 +117,17 @@ def main():
     else:
         model_to_load = None
 
+    if 'manual_seed' in config_info['training'].keys():
+        seed = config_info['training']['manual_seed']
+    else:
+        seed = None
+
     print("\n#### GPU INFORMATION ###")
     print(f"Using device number: {torch.cuda.current_device()}, name: {torch.cuda.get_device_name()}")
     print(f"Device available: {torch.cuda.is_available()}\n")
+    if seed is not None:
+        # set manual seed if required (both numpy and torch)
+        set_determinism(seed=seed)
 
     """
     Setup data directory
@@ -313,6 +321,7 @@ def main():
         out_channels=nr_out_channels,
         kernel_size=kernels,
         strides=strides,
+        upsample_kernel_size=strides[1:],
         norm_name="instance",
         deep_supervision=True,
         deep_supr_num=2,
@@ -351,12 +360,16 @@ def main():
         def _iteration(self, engine, batchdata):
             inputs, targets = self.prepare_batch(batchdata)
             inputs, targets = inputs.to(engine.state.device), targets.to(engine.state.device)
-            flip_inputs = torch.flip(inputs, dims=(2, 3))
+            flip_inputs_1 = torch.flip(inputs, dims=(2,))
+            flip_inputs_2 = torch.flip(inputs, dims=(3,))
+            flip_inputs_3 = torch.flip(inputs, dims=(2, 3))
 
             def _compute_pred():
                 pred = self.inferer(inputs, self.network)
-                flip_pred = torch.flip(self.inferer(flip_inputs, self.network), dims=(2, 3))
-                return (pred + flip_pred) / 2
+                flip_pred_1 = torch.flip(self.inferer(flip_inputs_1, self.network), dims=(2,))
+                flip_pred_2 = torch.flip(self.inferer(flip_inputs_2, self.network), dims=(3,))
+                flip_pred_3 = torch.flip(self.inferer(flip_inputs_3, self.network), dims=(2, 3))
+                return (pred + flip_pred_1 + flip_pred_2 + flip_pred_3) / 4
 
             # execute forward computation
             self.network.eval()
@@ -375,13 +388,13 @@ def main():
         inferer=SlidingWindowInferer2D(roi_size=patch_size, sw_batch_size=4, overlap=0.0),
         post_transform=None,  # NOTE: IN dynUNet this was set to None!
         key_val_metric={
-            # "Mean_dice": MeanDice(
-            #     include_background=False,
-            #     to_onehot_y=True,
-            #     mutually_exclusive=True,
-            #     output_transform=lambda x: (x["pred"], x["label"]),
-            # )
-            "Percentage_slice": PercentageSliceDice(output_transform=lambda x: (x["pred"], x["label"]))
+            "Mean_dice": MeanDice(
+                include_background=False,
+                to_onehot_y=True,
+                mutually_exclusive=True,
+                output_transform=lambda x: (x["pred"], x["label"]),
+            )
+            # "Percentage_slice": PercentageSliceDice(output_transform=lambda x: (x["pred"], x["label"]))
 
         },
         val_handlers=val_handlers,
@@ -402,7 +415,6 @@ def main():
     validation_every_n_iters = validation_every_n_epochs * epoch_len
 
     writer_train = SummaryWriter(log_dir=os.path.join(out_model_dir, "train"))
-    #TODO: find way to add the learning rate schedule saving and reloading
     train_handlers = [
         LrScheduleHandler(lr_scheduler=scheduler, print_lr=True),
         ValidationHandler(validator=evaluator, interval=validation_every_n_iters, epoch_level=False),

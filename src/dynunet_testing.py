@@ -161,6 +161,7 @@ def main():
         out_channels=nr_out_channels,
         kernel_size=kernels,
         strides=strides,
+        upsample_kernel_size=strides[1:],
         norm_name="instance",
         deep_supervision=True,
         deep_supr_num=2,
@@ -203,12 +204,16 @@ def main():
             inputs = inputs.to(engine.state.device)
             if targets is not None:
                 targets = targets.to(engine.state.device)
-            flip_inputs = torch.flip(inputs, dims=(2, 3))
+            flip_inputs_1 = torch.flip(inputs, dims=(2,))
+            flip_inputs_2 = torch.flip(inputs, dims=(3,))
+            flip_inputs_3 = torch.flip(inputs, dims=(2, 3))
 
             def _compute_pred():
                 pred = self.inferer(inputs, self.network)
-                flip_pred = torch.flip(self.inferer(flip_inputs, self.network), dims=(2, 3))
-                return (pred + flip_pred) / 2
+                flip_pred_1 = torch.flip(self.inferer(flip_inputs_1, self.network), dims=(2,))
+                flip_pred_2 = torch.flip(self.inferer(flip_inputs_2, self.network), dims=(3,))
+                flip_pred_3 = torch.flip(self.inferer(flip_inputs_3, self.network), dims=(2, 3))
+                return (pred + flip_pred_1 + flip_pred_2 + flip_pred_3) / 4
 
             # execute forward computation
             self.network.eval()
