@@ -17,10 +17,10 @@ training:
   inplane_size: [448, 512]
   spacing: [0.8, 0.8, -1.0]
   loss_type: "dynDiceCELoss"
-  pow_dice: 2
+  pow_dice: 1
   batch_size_train: 14
   batch_size_valid: 1
-  nr_train_epochs: 12000
+  nr_train_epochs: 25000
   validation_every_n_epochs: 20
   sliding_window_validation: True
   optimiser_choice: "Adam"    # currently not in use (using default as in nnUNet SGD + Momentum)
@@ -29,7 +29,6 @@ training:
   lr: 1e-2
   lr_decay: null              # currently not in use (there is a custom lr scheduler)
   manual_seed: 0
-#  model_to_load: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests/2020-10-09_11-31-03_monai0.3.0-MONAI_dynUNet_batch_Dice/checkpoint_epoch=7364.pth"
 
 data:
   data_root: ["/mnt/data/mranzini/Desktop/GIFT-Surg/Data/NeuroImage_dataset/GroupA",
@@ -44,11 +43,11 @@ data:
                     "/mnt/data/mranzini/Desktop/GIFT-Surg/Retraining_with_expanded_dataset/config/file_names/list_validation_p_files.txt"]
 
 output:
-  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_tests"
-  output_subfix: "monai0.3.0-MONAI_dynUNet_Diceto2_valpercentage"
+  out_model_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/monai0.3.0_frompip_tests"
+  output_subfix: "monai0.3.0-MONAI_dynUNet_Dice_Xent"
   cache_dir: "/mnt/data/mranzini/Desktop/GIFT-Surg/FBS_Monai/basic_unet_monai/tests_deterministic_seeds/persistent_cache_3Dval_dynUnet"
   max_nr_models_saved: 1
   val_image_to_tensorboad: False
 
 log:
-  message: "Running dynUNet training with Dice^2 + Xent as loss, but using the percentage of slices with Dice > 0.9 as validation metric"
+  message: "Running dynUNet training with Dice + Xent as loss, for longer."
